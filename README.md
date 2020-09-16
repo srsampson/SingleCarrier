@@ -1,2 +1,2 @@
-# SingleCarrier
-A QPSK Sing Carrier Testing Program
+#### SingleCarrier
+A QPSK Single Carrier Testing Program
