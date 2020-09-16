@@ -62,25 +62,24 @@ void qpsk_demod(complex float symbol, int *bits) {
 /*
  * Convert frequency sample into time domain
  */
-static void idft(struct QPSK *qpsk, complex float *result, complex float *vector) {
-    result[0] = vector[0] * qpsk->inv_m;
+static void idft(struct QPSK *qpsk, complex float *result, complex float *value) {
+    result[0] = value[0] * qpsk->inv_m;
 
     for (int row = 1; row < qpsk->m; row++) {
-        complex float c = cmplx(qpsk->doc * row);
-        result[row] = (c * vector[0]) * qpsk->inv_m;
+        result[row] = (cmplx(qpsk->doc * row) * value[0]) * qpsk->inv_m;
     }
 }
 /*
  * Convert time domain into frequency sample
  */
-static void dft(struct QPSK *qpsk, complex float *result, complex float *vector) {
-    result[0] = vector[0];
+static void dft(struct QPSK *qpsk, complex float *result, complex float *value) {
+    result[0] = value[0];
 
     complex float c = cmplxconj(qpsk->doc);
     complex float delta = c;
 
     for (int row = 1; row < qpsk->m; row++) {
-        result[0] += (vector[row] * c);
+        result[0] += (value[row] * c);
         c *= delta;
     }
 }
@@ -96,25 +95,30 @@ static complex float vector_sum(complex float *a, int num_elements) {
 }
 
 int main(int argc, char** argv) {
+    float baud;
+    
     srand(time(0));
     
     struct QPSK *qpsk = (struct QPSK *) malloc(sizeof (struct QPSK));
 
+    baud = 1600.0f;
+    
     qpsk->ns = 8; /* Number of Symbol frames */
     qpsk->bps = 2; /* Bits per Symbol */
-    qpsk->ts = 1.0f / 1600.0f;
+    qpsk->ts = 1.0f / baud;
+    qpsk->rs = (1.0f / qpsk->ts); /* Symbol Rate */
+    
     qpsk->centre = 1600.0f; /* Centre Audio Frequency */
     qpsk->fs = 8000.0f; /* Sample Frequency */
+    qpsk->doc = (TAU / (qpsk->fs / qpsk->rs));  // @ 1.256636
+    qpsk->m = (int) (qpsk->fs / qpsk->rs); /* 5 */
+    qpsk->inv_m = (1.0f / (float) qpsk->m);
+    
     qpsk->ntxtbits = 4;
     qpsk->ftwindowwidth = 11;
     qpsk->timing_mx_thresh = 0.30f;
-    qpsk->rs = (1.0f / qpsk->ts); /* Modulation Symbol Rate 1600 baud */
-    qpsk->m = (int) (qpsk->fs / qpsk->rs); /* 5 */
-    qpsk->inv_m = (1.0f / (float) qpsk->m);
-    qpsk->doc = (TAU / (qpsk->fs / qpsk->rs));  // @ 1.256636
 
     /* create the QPSK pilot time-domain waveform */
-    
 
     complex float temp[qpsk->m];
     complex float pilot, data;
