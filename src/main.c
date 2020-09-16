@@ -4,7 +4,6 @@
 #include <stdbool.h>
 #include <complex.h>
 #include <time.h>
-#include <liquid/liquid.h>
 
 #include "qpsk_internal.h"
 
