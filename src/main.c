@@ -10,7 +10,7 @@
 /*
  * QPSK Quadrant bit-pair values - Gray Coded
  */
-const complex float constellation[] = {
+static const complex float constellation[] = {
     1.0f + 0.0f * I,
     0.0f + 1.0f * I,
     0.0f - 1.0f * I,
@@ -20,7 +20,7 @@ const complex float constellation[] = {
 /*
  * These pilots are compatible with Octave version
  */
-const int8_t pilotvalues[] = {
+static const int8_t pilotvalues[] = {
     -1, -1, 1, 1, -1, -1, -1, 1,
     -1, 1, -1, 1, 1, 1, 1, 1,
     1, 1, 1, -1, -1, 1, -1, 1,
@@ -35,7 +35,7 @@ const int8_t pilotvalues[] = {
  * Created with:
  * hs = gen_rn_coeffs(.35, 0.000125, 1600, 8, 5);
  */
-static float rrccoeff[] = {
+static const float rrccoeff[] = {
     0.00265568,
     0.00287612,
     0.00063112,
