@@ -31,6 +31,10 @@ const int8_t pilotvalues[] = {
     1, 1, 1, 1, -1, 1, -1, 1
 };
 
+/*
+ * Created with:
+ * hs = gen_rn_coeffs(.35, 0.000125, 1600, 8, 5);
+ */
 static float rrccoeff[] = {
     0.00265568,
     0.00287612,
