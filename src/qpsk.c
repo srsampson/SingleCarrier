@@ -125,26 +125,36 @@ static complex float vector_sum(complex float *a, int num_elements) {
     return sum;
 }
 
-static void tx_symbol(complex float symbol) {
+static void tx_symbol(struct QPSK *qpsk, complex float symbol, bool filtered) {
     int i;
 
-    for (i = 0; i < RRCLEN - 1; i++) {
-        tx_filter[i] = tx_filter[i + 1];
+    if (filtered) {
+        for (i = 0; i < RRCLEN - 1; i++) {
+            tx_filter[i] = tx_filter[i + 1];
+        }
+
+        tx_filter[i] = symbol;
+
+        complex float y = 0.0f;
+
+        for (i = 0; i < RRCLEN; i++) {
+            y += tx_filter[i] * rrccoeff[i];
+        }
+
+        y = y * osc_table[osc_table_offset];
+        osc_table_offset = (osc_table_offset + 1) % OSC_TABLE_SIZE;
+
+        tx_samples[sample_offset] = (int16_t) (crealf(y) * 16384.0f);
+        sample_offset = (sample_offset + 1) % TX_SAMPLES_SIZE;
+    } else {
+        for (i = 0; i < qpsk->m; i++) {
+            complex float y = symbol * osc_table[osc_table_offset];
+            osc_table_offset = (osc_table_offset + 1) % OSC_TABLE_SIZE;
+
+            tx_samples[sample_offset] = (int16_t) (crealf(y) * 16384.0f);
+            sample_offset = (sample_offset + 1) % TX_SAMPLES_SIZE;
+        }
     }
-
-    tx_filter[i] = symbol;
-
-    complex float y = 0.0f;
-
-    for (i = 0; i < RRCLEN; i++) {
-        y += tx_filter[i] * rrccoeff[i];
-    }
-
-    y = y * osc_table[osc_table_offset];
-    osc_table_offset = (osc_table_offset + 1) % OSC_TABLE_SIZE;
-
-    tx_samples[sample_offset] = (uint16_t) (crealf(y) * 32767.0f);
-    sample_offset = (sample_offset + 1) % TX_SAMPLES_SIZE;
 }
 
 /*
@@ -157,6 +167,18 @@ static void flush_tx_filter() {
 }
 
 int main(int argc, char** argv) {
+    bool filtered;
+    
+    if (argc == 2) {
+        if (strcmp("--filtered", argv[1]) == 0) {
+            filtered = true;
+        } else {
+            filtered = false; // punt
+        }
+    } else {
+        filtered = false;
+    }
+    
     srand(time(0));
 
     struct QPSK *qpsk = (struct QPSK *) malloc(sizeof (struct QPSK));
@@ -192,21 +214,22 @@ int main(int argc, char** argv) {
 
     FILE *fout = fopen("/tmp/spectrum.raw", "wb");
 
+    sample_offset = 0;
     flush_tx_filter();
-    
+
     for (int k = 0; k < 500; k++) {
         // 33 BPSK pilots
         for (int i = 0; i < 33; i++) {
-            symbol = (pilotvalues[i] == 1) ? .75f : -.75f;  // Not so loud
+            symbol = (pilotvalues[i] == 1) ? .75f : -.75f; // Not so loud
 
-            tx_symbol(symbol);
+            tx_symbol(qpsk, symbol, filtered);
         }
 
         // 31 QPSK
         for (int i = 0; i < 31; i++) {
             symbol = constellation[rand() % 4];
 
-            tx_symbol(symbol);
+            tx_symbol(qpsk, symbol, filtered);
         }
     }
 
