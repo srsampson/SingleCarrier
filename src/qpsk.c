@@ -8,7 +8,12 @@
 #include "qpsk_internal.h"
 
 static complex float osc_table[OSC_TABLE_SIZE];
+static complex float tx_filter[RRCLEN];
+
+static int16_t tx_samples[TX_SAMPLES_SIZE];
+
 static int osc_table_offset;
+static int sample_offset;
 
 /*
  * QPSK Quadrant bit-pair values - Gray Coded
@@ -82,8 +87,6 @@ static const float rrccoeff[] = {
     0.00265568
 };
 
-#define RRCLEN 39
-
 static float cnormf(complex float val) {
     float realf = crealf(val);
     float imagf = cimagf(val);
@@ -112,34 +115,6 @@ void qpsk_demod(complex float symbol, int *bits) {
     bits[1] = cimagf(rotate) < 0.0f;
 }
 
-/*
- * Convert frequency sample into time domain
- */
-static void idft(struct QPSK *qpsk, complex float *result, complex float value) {
-    result[0] = value * qpsk->inv_m;
-
-    for (int row = 1; row < qpsk->m; row++) {
-        result[row] = (cmplx(.1f * qpsk->doc * row) * value) * qpsk->inv_m;
-        
-        // the .1 cleaned-up the spectrum a bit ??
-    }
-}
-
-/*
- * Convert time domain into frequency sample
- */
-static void dft(struct QPSK *qpsk, complex float result, complex float *value) {
-    result = value[0];
-
-    complex float c = cmplxconj(qpsk->doc);
-    complex float delta = c;
-
-    for (int row = 1; row < qpsk->m; row++) {
-        result += (value[row] * c);
-        c *= delta;
-    }
-}
-
 static complex float vector_sum(complex float *a, int num_elements) {
     complex float sum = 0.0f;
 
@@ -150,24 +125,34 @@ static complex float vector_sum(complex float *a, int num_elements) {
     return sum;
 }
 
-static void fir(float in[], float out[], int points) {
-    float delay[RRCLEN] = {0.0f};
-    int i, j;
+static void tx_symbol(complex float symbol) {
+    int i;
 
-    for (i = 0; i < points; i++) {
-        for (j = RRCLEN; j > 1; j--) {
-            delay[j-1] = delay[j-2];
-        }
-  
-        delay[0] = in[i];
+    for (i = 0; i < RRCLEN - 1; i++) {
+        tx_filter[i] = tx_filter[i + 1];
+    }
 
-        float y = 0.0f;
-        
-        for (j = 0; j < RRCLEN; j++) {
-            y += rrccoeff[j] * delay[j];
-        }
-        
-        out[i] = y;
+    tx_filter[i] = symbol;
+
+    complex float y = 0.0f;
+
+    for (i = 0; i < RRCLEN; i++) {
+        y += tx_filter[i] * rrccoeff[i];
+    }
+
+    y = y * osc_table[osc_table_offset];
+    osc_table_offset = (osc_table_offset + 1) % OSC_TABLE_SIZE;
+
+    tx_samples[sample_offset] = (uint16_t) (crealf(y) * 32767.0f);
+    sample_offset = (sample_offset + 1) % TX_SAMPLES_SIZE;
+}
+
+/*
+ * Fill the FIR buffer with random data
+ */
+static void flush_tx_filter() {
+    for (int i = 0; i < RRCLEN; i++) {
+        tx_filter[i] = constellation[rand() % 4];
     }
 }
 
@@ -177,16 +162,16 @@ int main(int argc, char** argv) {
     struct QPSK *qpsk = (struct QPSK *) malloc(sizeof (struct QPSK));
 
     float baud = 1600.0f;
-    
+
     qpsk->fs = 8000.0f; /* Sample Frequency */
     qpsk->centre = 1200.0;
-    
+
     osc_table_offset = 0;
-        
+
     for (int i = 0; i < OSC_TABLE_SIZE; i++) {
         osc_table[i] = cmplx(TAU * qpsk->centre * ((float) i / qpsk->fs));
     }
-    
+
     qpsk->ns = 8; /* Number of Symbol frames */
     qpsk->bps = 2; /* Bits per Symbol */
     qpsk->ts = 1.0f / baud;
@@ -203,49 +188,29 @@ int main(int argc, char** argv) {
 
     /* create the QPSK pilot time-domain waveform */
 
-    float frame[160000] = { 0.0f };
-    complex float temp[qpsk->m];
-    complex float pilot, data;
-    int bpsk_val, qpsk_val;
+    complex float symbol;
 
     FILE *fout = fopen("/tmp/spectrum.raw", "wb");
 
-    int next = 0;
-
+    flush_tx_filter();
+    
     for (int k = 0; k < 500; k++) {
-        // 31 BPSK pilots
-        for (int i = 0; i < 31; i++) {
-            bpsk_val = (pilotvalues[i] == 1) ? 0 : 3;
-            pilot = constellation[bpsk_val];
+        // 33 BPSK pilots
+        for (int i = 0; i < 33; i++) {
+            symbol = (pilotvalues[i] == 1) ? .75f : -.75f;  // Not so loud
 
-            idft(qpsk, temp, pilot);
-
-            for (int j = 0; j < qpsk->m; j++) {
-                frame[next++] =  crealf(temp[j]);
-            }
+            tx_symbol(symbol);
         }
+
         // 31 QPSK
         for (int i = 0; i < 31; i++) {
-            qpsk_val = rand() % 4;
-            data = constellation[qpsk_val];
+            symbol = constellation[rand() % 4];
 
-            idft(qpsk, temp, data);
-
-            for (int j = 0; j < qpsk->m; j++) {
-                frame[next++] = crealf(temp[j]);
-            }
+            tx_symbol(symbol);
         }
     }
 
-    float out[next];
-    
-    fir(&frame[0], &out[0], next);
-    
-    for (int i = 0; i < next; i++) {
-        int16_t val = (int16_t) (crealf(osc_table[osc_table_offset] * out[i]) * 50000);
-        osc_table_offset = (osc_table_offset + 1) % OSC_TABLE_SIZE;
-        fwrite(&val, sizeof (int16_t), 1, fout);
-    }
+    fwrite(tx_samples, sizeof (int16_t), sample_offset, fout);
 
     free(qpsk);
     fclose(fout);

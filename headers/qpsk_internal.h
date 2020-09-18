@@ -10,8 +10,10 @@ extern "C"
 {
 #endif
     
-#define OSC_TABLE_SIZE         32
-
+#define OSC_TABLE_SIZE  32
+#define TX_SAMPLES_SIZE (500 * 33 * 31)
+#define RRCLEN          39
+    
 #ifndef M_PI
 #define M_PI        3.14159265358979323846f
 #endif
