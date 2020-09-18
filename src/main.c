@@ -7,6 +7,9 @@
 
 #include "qpsk_internal.h"
 
+static complex float osc_table[OSC_TABLE_SIZE];
+static int osc_table_offset;
+
 /*
  * QPSK Quadrant bit-pair values - Gray Coded
  */
@@ -116,7 +119,9 @@ static void idft(struct QPSK *qpsk, complex float *result, complex float value) 
     result[0] = value * qpsk->inv_m;
 
     for (int row = 1; row < qpsk->m; row++) {
-        result[row] = (cmplx(qpsk->doc * row) * value) * qpsk->inv_m;
+        result[row] = (cmplx(.1f * qpsk->doc * row) * value) * qpsk->inv_m;
+        
+        // the .1 cleaned-up the spectrum a bit ??
     }
 }
 
@@ -172,7 +177,16 @@ int main(int argc, char** argv) {
     struct QPSK *qpsk = (struct QPSK *) malloc(sizeof (struct QPSK));
 
     float baud = 1600.0f;
-
+    
+    qpsk->fs = 8000.0f; /* Sample Frequency */
+    qpsk->centre = 1200.0;
+    
+    osc_table_offset = 0;
+        
+    for (int i = 0; i < OSC_TABLE_SIZE; i++) {
+        osc_table[i] = cmplx(TAU * qpsk->centre * ((float) i / qpsk->fs));
+    }
+    
     qpsk->ns = 8; /* Number of Symbol frames */
     qpsk->bps = 2; /* Bits per Symbol */
     qpsk->ts = 1.0f / baud;
@@ -189,7 +203,7 @@ int main(int argc, char** argv) {
 
     /* create the QPSK pilot time-domain waveform */
 
-    float frame[160000];
+    float frame[160000] = { 0.0f };
     complex float temp[qpsk->m];
     complex float pilot, data;
     int bpsk_val, qpsk_val;
@@ -197,10 +211,6 @@ int main(int argc, char** argv) {
     FILE *fout = fopen("/tmp/spectrum.raw", "wb");
 
     int next = 0;
-
-    for (int i = 0; i < 160000; i++) {
-        frame[i] = 0.0f;
-    }
 
     for (int k = 0; k < 500; k++) {
         // 31 BPSK pilots
@@ -211,7 +221,7 @@ int main(int argc, char** argv) {
             idft(qpsk, temp, pilot);
 
             for (int j = 0; j < qpsk->m; j++) {
-                frame[next++] = crealf(temp[j]);
+                frame[next++] =  crealf(temp[j]);
             }
         }
         // 31 QPSK
@@ -232,7 +242,8 @@ int main(int argc, char** argv) {
     fir(&frame[0], &out[0], next);
     
     for (int i = 0; i < next; i++) {
-        int16_t val = (int16_t) (out[i] * 50000.0f);
+        int16_t val = (int16_t) (crealf(osc_table[osc_table_offset] * out[i]) * 50000);
+        osc_table_offset = (osc_table_offset + 1) % OSC_TABLE_SIZE;
         fwrite(&val, sizeof (int16_t), 1, fout);
     }
 

@@ -9,6 +9,8 @@
 extern "C"
 {
 #endif
+    
+#define OSC_TABLE_SIZE         32
 
 #ifndef M_PI
 #define M_PI        3.14159265358979323846f
@@ -80,6 +82,7 @@ struct QPSK {
     int ntxtbits; /* reserve bits/frame for aux text information */
     int nuwbits; /* Unique word used for positive indication of lock */
 
+    float centre;
     float fs; /* Sample rate */
     float ts; /* Symbol cycle time */
     float rs; /* Symbol rate */
