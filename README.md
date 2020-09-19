@@ -1,9 +1,9 @@
 #### SingleCarrier
 A QPSK Single Carrier Testing Program
 
-1600 Baud QPSK or 3000 bit/sec with BPSK pilots. This experiment sends 33 BPSK Pilots and 31 QPSK random data 500 times in a loop.
+1600 Baud QPSK or 3000 bit/sec with BPSK pilots.
 
-In the future, this will change, as what we really want is one frame of BPSK pilots, and 8 frames of QPSK data. The BPSK pilots are used to make this a coherent modem, where the pilots are compared to what was received and unfiltered.
+One (1) frame of BPSK pilots, and eight (8) frames of QPSK data. The BPSK pilots are used to make this a coherent modem, where the transmitted pilots are compared to what was received.
 
 This spectrum produced with: $ ./qpsk  
 
@@ -11,7 +11,7 @@ This spectrum produced with: $ ./qpsk
 
 FIR filter with 1200 Hz center Frequency, .35 alpha Root Raised Cosine Filter
 
-Here's the time domain:
+Here's the waveform idea in the time domain:
 
 ![My image](https://raw.githubusercontent.com/srsampson/SingleCarrier/master/time-domain.png)
 

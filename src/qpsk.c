@@ -245,15 +245,19 @@ int main(int argc, char** argv) {
 
         bpsk_modulate(bits, 33);
         flush();
-        
-        // 31 QPSK
-        for (int i = 0; i < 62; i += 2) {
-            bits[i] = rand() % 2;
-            bits[i+1] = rand() % 2;
+
+        /*
+         * 8 frames of data to each pilot frame
+         */
+        for (int j = 0; j < 8; j++) {
+            // 31 QPSK
+            for (int i = 0; i < 62; i += 2) {
+                bits[i] = rand() % 2;
+                bits[i + 1] = rand() % 2;
+            }
+
+            qpsk_modulate(bits, 31);
         }
-        
-        qpsk_modulate(bits, 31);
-        flush();
         
         fwrite(tx_samples, sizeof (int16_t), tx_sample_offset, fout);
     }
