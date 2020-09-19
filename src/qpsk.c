@@ -226,7 +226,7 @@ int main(int argc, char** argv) {
      *
      * So you should see 20 seconds of audio recorded
      */
-    for (int k = 0; k < 500; k++) { // 500 * (1/1600) = 20 seconds
+    for (int k = 0; k < 500; k++) {
         sample_offset = 0;
 
         // 33 BPSK pilots
