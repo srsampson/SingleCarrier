@@ -5,11 +5,11 @@ A QPSK Single Carrier Testing Program
 
 This spectrum produced with: $ ./qpsk  
 
-![My image](https://raw.githubusercontent.com/srsampson/SingleCarrier/master/spectrum.png)
+![My image](https://raw.githubusercontent.com/srsampson/SingleCarrier/master/spectrum-filtered.png)
 
 FIR filter with 1200 Hz center Frequency, .35 alpha Root Raised Cosine Filter
 
-This spectrum produced with: $ ./qpsk --filtered  
+Here's the time domain:
 
-![My image](https://raw.githubusercontent.com/srsampson/SingleCarrier/master/spectrum-filtered.png)
+![My image](https://raw.githubusercontent.com/srsampson/SingleCarrier/master/time-domain.png)
 
