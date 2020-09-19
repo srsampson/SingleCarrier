@@ -130,8 +130,8 @@ static void tx_symbol(struct QPSK *qpsk, complex float symbol, bool filtered) {
     complex float y;
     int i, j;
 
-    if (filtered) {
-        for (j = 0; j < qpsk->m; j++) {
+    for (j = 0; j < qpsk->m; j++) {
+        if (filtered) {
             for (i = 0; i < RRCLEN - 1; i++) {
                 tx_filter[i] = tx_filter[i + 1];
             }
@@ -149,9 +149,7 @@ static void tx_symbol(struct QPSK *qpsk, complex float symbol, bool filtered) {
 
             tx_samples[sample_offset] = (int16_t) (crealf(y) * 16384.0f);
             sample_offset = (sample_offset + 1) % TX_SAMPLES_SIZE;
-        }
-    } else {
-        for (j = 0; j < qpsk->m; j++) {
+        } else {
             y = symbol * osc_table[osc_table_offset];
             osc_table_offset = (osc_table_offset + 1) % OSC_TABLE_SIZE;
 
@@ -171,7 +169,9 @@ static void flush_tx_filter() {
 }
 
 int main(int argc, char** argv) {
+    complex float symbol;
     bool filtered;
+    FILE *fout;
 
     if (argc == 2) {
         if (strcmp("--filtered", argv[1]) == 0) {
@@ -187,9 +187,12 @@ int main(int argc, char** argv) {
 
     struct QPSK *qpsk = (struct QPSK *) malloc(sizeof (struct QPSK));
 
-    float baud = 1600.0f;
-
     qpsk->fs = 8000.0f; /* Sample Frequency */
+    qpsk->rs = 1600.0f; /* Symbol Rate */
+    qpsk->ts = 1.0f / qpsk->rs;
+    qpsk->m = (int) (qpsk->fs / qpsk->rs); /* 5 */
+    qpsk->inv_m = (1.0f / (float) qpsk->m);
+
     qpsk->centre = 1200.0;
 
     osc_table_offset = 0;
@@ -200,25 +203,30 @@ int main(int argc, char** argv) {
 
     qpsk->ns = 8; /* Number of Symbol frames */
     qpsk->bps = 2; /* Bits per Symbol */
-    qpsk->ts = 1.0f / baud;
-    qpsk->rs = (1.0f / qpsk->ts); /* Symbol Rate */
-
-    qpsk->m = (int) (qpsk->fs / qpsk->rs); /* 5 */
-    qpsk->inv_m = (1.0f / (float) qpsk->m);
-
     qpsk->ntxtbits = 4;
     qpsk->ftwindowwidth = 11;
     qpsk->timing_mx_thresh = 0.30f;
 
     /* create the QPSK pilot time-domain waveform */
 
-    complex float symbol;
-
-    FILE *fout = fopen("/tmp/spectrum.raw", "wb");
+    if (filtered) {
+        fout = fopen("/tmp/spectrum-filtered.raw", "wb");
+    } else {
+        fout = fopen("/tmp/spectrum.raw", "wb");
+    }
 
     flush_tx_filter();
 
-    for (int k = 0; k < 500; k++) {
+    /*
+     * This test transmits 64 symbols 500 times
+     * 
+     * Each symbol takes 1/1600 or 0.000625 sec
+     * 0.000625 * 64 = .040 sec
+     * .040 * 500 = 20 sec
+     *
+     * So you should see 20 seconds of audio recorded
+     */
+    for (int k = 0; k < 500; k++) { // 500 * (1/1600) = 20 seconds
         sample_offset = 0;
 
         // 33 BPSK pilots
