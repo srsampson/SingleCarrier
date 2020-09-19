@@ -130,18 +130,18 @@ static void tx_symbol(struct QPSK *qpsk, complex float symbol, bool filtered) {
     complex float y;
     int i, j;
 
-    for (i = 0; i < qpsk->m; i++) {
-        if (filtered) {
-            for (j = 0; j < RRCLEN - 1; j++) {
-                tx_filter[j] = tx_filter[j + 1];
+    if (filtered) {
+        for (j = 0; j < qpsk->m; j++) {
+            for (i = 0; i < RRCLEN - 1; i++) {
+                tx_filter[i] = tx_filter[i + 1];
             }
 
-            tx_filter[j] = symbol;
+            tx_filter[i] = symbol;
 
             y = 0.0f;
 
-            for (j = 0; j < RRCLEN; j++) {
-                y += tx_filter[j] * rrccoeff[j];
+            for (i = 0; i < RRCLEN; i++) {
+                y += tx_filter[i] * rrccoeff[i];
             }
 
             y *= osc_table[osc_table_offset];
@@ -149,7 +149,9 @@ static void tx_symbol(struct QPSK *qpsk, complex float symbol, bool filtered) {
 
             tx_samples[sample_offset] = (int16_t) (crealf(y) * 16384.0f);
             sample_offset = (sample_offset + 1) % TX_SAMPLES_SIZE;
-        } else {
+        }
+    } else {
+        for (j = 0; j < qpsk->m; j++) {
             y = symbol * osc_table[osc_table_offset];
             osc_table_offset = (osc_table_offset + 1) % OSC_TABLE_SIZE;
 
