@@ -19,7 +19,7 @@ extern "C"
 #define TS              (1.0f / RS)
 #define CYCLES          (int) (FS / RS)
 #define CENTER          1200.0f
-#define SCALE           16384.0f
+#define SCALE           8192.0f
 
 #ifndef M_PI
 #define M_PI        3.14159265358979323846f

@@ -8,6 +8,8 @@
 
 #include "qpsk.h"
 
+static FILE *fout;
+
 static complex float osc_table[OSC_TABLE_SIZE];
 static complex float tx_filter[RRCLEN];
 
@@ -127,35 +129,36 @@ static complex float vector_sum(complex float *a, int num_elements) {
     return sum;
 }
 
-static void tx_symbol(complex float symbol) {
+static void tx_frame(complex float symbol[], int length) {
     complex float y;
-    int i, j;
 
-    /*
-     * At the 8 kHz sample rate, we will need
-     * 5 cycles of the symbol for 1600 baud
-     */
-    for (j = 0; j < CYCLES; j++) {
-        for (i = 0; i < (RRCLEN - 1); i++) {
-            tx_filter[i] = tx_filter[i + 1];
-        }
-
-        tx_filter[i] = symbol;
-
-        y = 0.0f;
-
-        for (i = 0; i < RRCLEN; i++) {
-            y += tx_filter[i] * rrccoeff[i];
-        }
-
-        y *= osc_table[tx_osc_offset];
-        tx_osc_offset = (tx_osc_offset + 1) % OSC_TABLE_SIZE;
-
+    for (int k = 0; k < length; k++) {
         /*
-         * 16384.0 will give 50% amplitude
+         * At the 8 kHz sample rate, we will need
+         * 5 cycles of the symbol for 1600 baud
          */
-        tx_samples[tx_sample_offset] = (int16_t) (crealf(y) * SCALE);
-        tx_sample_offset = (tx_sample_offset + 1) % TX_SAMPLES_SIZE;
+        for (int j = 0; j < CYCLES; j++) {
+            for (int i = 0; i < (RRCLEN - 1); i++) {
+                tx_filter[i] = tx_filter[i + 1];
+            }
+
+            tx_filter[(RRCLEN - 1)] = symbol[k];
+
+            y = 0.0f;
+
+            for (int i = 0; i < RRCLEN; i++) {
+                y += tx_filter[i] * rrccoeff[i];
+            }
+
+            y *= osc_table[tx_osc_offset];
+            tx_osc_offset = (tx_osc_offset + 1) % OSC_TABLE_SIZE;
+
+            /*
+             * 8192 will give 25% amplitude
+             */
+            tx_samples[tx_sample_offset] = (int16_t) (crealf(y) * SCALE);
+            tx_sample_offset = (tx_sample_offset + 1) % TX_SAMPLES_SIZE;
+        }
     }
 }
 
@@ -172,18 +175,45 @@ static void flush_tx_filter() {
  * Transmit null
  */
 static void flush() {
+    complex float symbol[4];
+    
     for (int i = 0; i < 4; i++) {
-        tx_symbol(0.0f);
+        symbol[i] = 0.0f;
     }
+
+    tx_frame(symbol, 4);
+}
+
+void bpsk_modulate(int tx_bits[], int symbols) {
+    complex float symbol[symbols];
+
+    for (int i = 0; i < symbols; i++) {
+        symbol[i] = (float) tx_bits[i];
+    }
+
+    tx_frame(symbol, symbols);
+}
+
+void qpsk_modulate(int tx_bits[], int symbols) {
+    complex float symbol[symbols];
+    int dibit[2];
+
+    for (int s = 0, i = 0; i < symbols; s += 2, i++) {
+        dibit[0] = tx_bits[s + 1] & 0x1;
+        dibit[1] = tx_bits[s ] & 0x1;
+
+        symbol[i] = qpsk_mod(dibit);
+    }
+
+    tx_frame(symbol, symbols);
 }
 
 int main(int argc, char** argv) {
-    complex float symbol;
-    FILE *fout;
-
+    int bits[64];
     srand(time(0));
 
     tx_osc_offset = 0;
+    rx_osc_offset = 0;
 
     for (int i = 0; i < OSC_TABLE_SIZE; i++) {
         osc_table[i] = cmplx(TAU * CENTER * ((float) i / FS));
@@ -210,20 +240,19 @@ int main(int argc, char** argv) {
 
         // 33 BPSK pilots
         for (int i = 0; i < 33; i++) {
-            symbol = constellation[(pilotvalues[i] == 1) ? 0 : 3];
-
-            tx_symbol(symbol);
+            bits[i] = pilotvalues[i];
         }
 
+        bpsk_modulate(bits, 33);
         flush();
         
         // 31 QPSK
-        for (int i = 0; i < 31; i++) {
-            symbol = constellation[rand() % 4];
-
-            tx_symbol(symbol);
+        for (int i = 0; i < 62; i += 2) {
+            bits[i] = rand() % 2;
+            bits[i+1] = rand() % 2;
         }
-
+        
+        qpsk_modulate(bits, 31);
         flush();
         
         fwrite(tx_samples, sizeof (int16_t), tx_sample_offset, fout);

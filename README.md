@@ -13,3 +13,7 @@ Here's the time domain:
 
 ![My image](https://raw.githubusercontent.com/srsampson/SingleCarrier/master/time-domain.png)
 
+Here's what it looks like on the FreeDV display:
+
+![My image](https://raw.githubusercontent.com/srsampson/SingleCarrier/master/waveform.png)
+
