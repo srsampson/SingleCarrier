@@ -11,7 +11,7 @@ extern "C"
 #endif
     
 #define OSC_TABLE_SIZE  32
-#define TX_SAMPLES_SIZE (500 * 33 * 31)
+#define TX_SAMPLES_SIZE (33 * 31)
 #define RRCLEN          39
     
 #ifndef M_PI

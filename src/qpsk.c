@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <complex.h>
+#include <string.h>
 #include <time.h>
 
 #include "qpsk_internal.h"
@@ -126,29 +127,30 @@ static complex float vector_sum(complex float *a, int num_elements) {
 }
 
 static void tx_symbol(struct QPSK *qpsk, complex float symbol, bool filtered) {
-    int i;
+    complex float y;
+    int i, j;
 
-    if (filtered) {
-        for (i = 0; i < RRCLEN - 1; i++) {
-            tx_filter[i] = tx_filter[i + 1];
-        }
+    for (i = 0; i < qpsk->m; i++) {
+        if (filtered) {
+            for (j = 0; j < RRCLEN - 1; j++) {
+                tx_filter[j] = tx_filter[j + 1];
+            }
 
-        tx_filter[i] = symbol;
+            tx_filter[j] = symbol;
 
-        complex float y = 0.0f;
+            y = 0.0f;
 
-        for (i = 0; i < RRCLEN; i++) {
-            y += tx_filter[i] * rrccoeff[i];
-        }
+            for (j = 0; j < RRCLEN; j++) {
+                y += tx_filter[j] * rrccoeff[j];
+            }
 
-        y = y * osc_table[osc_table_offset];
-        osc_table_offset = (osc_table_offset + 1) % OSC_TABLE_SIZE;
+            y *= osc_table[osc_table_offset];
+            osc_table_offset = (osc_table_offset + 1) % OSC_TABLE_SIZE;
 
-        tx_samples[sample_offset] = (int16_t) (crealf(y) * 16384.0f);
-        sample_offset = (sample_offset + 1) % TX_SAMPLES_SIZE;
-    } else {
-        for (i = 0; i < qpsk->m; i++) {
-            complex float y = symbol * osc_table[osc_table_offset];
+            tx_samples[sample_offset] = (int16_t) (crealf(y) * 16384.0f);
+            sample_offset = (sample_offset + 1) % TX_SAMPLES_SIZE;
+        } else {
+            y = symbol * osc_table[osc_table_offset];
             osc_table_offset = (osc_table_offset + 1) % OSC_TABLE_SIZE;
 
             tx_samples[sample_offset] = (int16_t) (crealf(y) * 16384.0f);
@@ -158,17 +160,17 @@ static void tx_symbol(struct QPSK *qpsk, complex float symbol, bool filtered) {
 }
 
 /*
- * Fill the FIR buffer with random data
+ * Zero out the FIR buffer
  */
 static void flush_tx_filter() {
     for (int i = 0; i < RRCLEN; i++) {
-        tx_filter[i] = constellation[rand() % 4];
+        tx_filter[i] = 0.0f;
     }
 }
 
 int main(int argc, char** argv) {
     bool filtered;
-    
+
     if (argc == 2) {
         if (strcmp("--filtered", argv[1]) == 0) {
             filtered = true;
@@ -178,7 +180,7 @@ int main(int argc, char** argv) {
     } else {
         filtered = false;
     }
-    
+
     srand(time(0));
 
     struct QPSK *qpsk = (struct QPSK *) malloc(sizeof (struct QPSK));
@@ -199,8 +201,6 @@ int main(int argc, char** argv) {
     qpsk->ts = 1.0f / baud;
     qpsk->rs = (1.0f / qpsk->ts); /* Symbol Rate */
 
-    qpsk->fs = 8000.0f; /* Sample Frequency */
-    qpsk->doc = (TAU / (qpsk->fs / qpsk->rs)); // @ 1.256636
     qpsk->m = (int) (qpsk->fs / qpsk->rs); /* 5 */
     qpsk->inv_m = (1.0f / (float) qpsk->m);
 
@@ -214,13 +214,14 @@ int main(int argc, char** argv) {
 
     FILE *fout = fopen("/tmp/spectrum.raw", "wb");
 
-    sample_offset = 0;
     flush_tx_filter();
 
     for (int k = 0; k < 500; k++) {
+        sample_offset = 0;
+
         // 33 BPSK pilots
         for (int i = 0; i < 33; i++) {
-            symbol = (pilotvalues[i] == 1) ? .75f : -.75f; // Not so loud
+            symbol = constellation[(pilotvalues[i] == 1) ? 0 : 3];
 
             tx_symbol(qpsk, symbol, filtered);
         }
@@ -231,9 +232,9 @@ int main(int argc, char** argv) {
 
             tx_symbol(qpsk, symbol, filtered);
         }
-    }
 
-    fwrite(tx_samples, sizeof (int16_t), sample_offset, fout);
+        fwrite(tx_samples, sizeof (int16_t), sample_offset, fout);
+    }
 
     free(qpsk);
     fclose(fout);
