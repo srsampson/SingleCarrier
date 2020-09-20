@@ -1,7 +1,7 @@
 #### SingleCarrier Modem
-A QPSK Single Carrier 1600 Baud Coherent Modem for Voice and Data
+A Single Carrier 1600 Baud QPSK Coherent Modem for Voice and Data
 
-1600 Baud QPSK or 3000 bit/sec
+1600 Baud QPSK or 3000 bit/sec (2-bits per Baud)
 Uses BPSK Pilots for Coherency and Syncronization
 
 One (1) frame of BPSK pilots (also used for sync), and eight (8) frames of QPSK data.
