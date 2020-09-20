@@ -1,10 +1,12 @@
-#### SingleCarrier
-A QPSK Single Carrier Testing Program
+#### SingleCarrier Modem
+A QPSK Single Carrier 1600 Baud Coherent Modem for Voice and Data
 
-1600 Baud QPSK or 3000 bit/sec with BPSK pilots.
+1600 Baud QPSK or 3000 bit/sec
+Uses BPSK Pilots for Coherency and Syncronization
 
-One (1) frame of BPSK pilots, and eight (8) frames of QPSK data. The BPSK pilots are used to make this a coherent modem, where the transmitted pilots are compared to what was received.
+One (1) frame of BPSK pilots (also used for sync), and eight (8) frames of QPSK data.
 
+#### Examples
 This spectrum produced with: $ ./qpsk  
 
 ![My image](https://raw.githubusercontent.com/srsampson/SingleCarrier/master/spectrum-filtered.png)
