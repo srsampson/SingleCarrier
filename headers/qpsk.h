@@ -11,9 +11,11 @@ extern "C"
 #include <math.h> 
 
 #define OSC_TABLE_SIZE  32
-#define TX_SAMPLES_SIZE (33 * (31 * 8))
-#define RRCLEN          39
 
+// some big number
+#define TX_SAMPLES_SIZE 2048
+
+#define RRCLEN          39
 #define FS              8000.0f
 #define RS              1600.0f
 #define TS              (1.0f / RS)
