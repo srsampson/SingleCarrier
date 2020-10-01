@@ -23,6 +23,9 @@ static float cnormf(complex float val) {
     return realf * realf + imagf * imagf;
 }
 
+/*
+ * Root Raised Cosine FIR .35 beta
+ */
 static complex float rx_fir(complex float sample[]) {
     complex float y = 0.0f;
 
@@ -33,6 +36,9 @@ static complex float rx_fir(complex float sample[]) {
     return y;
 }
 
+/*
+ * Sliding Window
+ */
 static float correlate_pilots(complex float sample[], int index) {
     float out = 0.0f;
 
@@ -43,24 +49,25 @@ static float correlate_pilots(complex float sample[], int index) {
     return sqrt(out * out);
 }
 
+/*
+ * Receive function (fout just for testing with Audacity)
+ */
 void receive_frame(int16_t in[], int *bits, FILE *fout) {
-    float mean, val;
-    int max_index = 0;
-
     for (int i = 0; i < RX_SAMPLES_SIZE; i++) {
-        val = (float) in[i] / 32767.0f;
+        float val = (float) in[i] / 32767.0f;
 
         rx_frame[i] = rx_frame[RX_SAMPLES_SIZE + i];
         rx_frame[RX_SAMPLES_SIZE + i] = osc_table[rx_osc_offset] * val;
         rx_osc_offset = (rx_osc_offset + 1) % OSC_TABLE_SIZE;
     }
 
-    // Downsample the 5 cycles at 8 kHz Sample rate
+    // Downsample the 5 cycles at 8 kHz Sample rate for 1600 Baud
 
-    for (int i = 0; i < (RX_SAMPLES_SIZE / 5); i++) {
-        proc_frame[i] = proc_frame[(RX_SAMPLES_SIZE / 5) + i];
-        proc_frame[(RX_SAMPLES_SIZE / 5) + i] = rx_fir(&rx_frame[i * 5]);
+    for (int i = 0; i < (RX_SAMPLES_SIZE / CYCLES); i++) {
+        proc_frame[i] = proc_frame[(RX_SAMPLES_SIZE / CYCLES) + i];
+        proc_frame[(RX_SAMPLES_SIZE / CYCLES) + i] = rx_fir(&rx_frame[i * CYCLES]);
 
+        // testing
         int16_t samp = (int16_t) (crealf(proc_frame[i]) * 32767.0f);
         fwrite(&samp, sizeof (int16_t), 1, fout);
     }
@@ -69,8 +76,9 @@ void receive_frame(int16_t in[], int *bits, FILE *fout) {
 
     float temp_value = 0.0f;
     float max_value = 0.0f;
-
-    for (int i = 0; i < (RX_SAMPLES_SIZE / 5); i++) {
+    int max_index = 0;
+    
+    for (int i = 0; i < (RX_SAMPLES_SIZE / CYCLES); i++) {
         temp_value = correlate_pilots(proc_frame, i);
 
         if (temp_value > max_value) {
