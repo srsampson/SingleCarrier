@@ -7,7 +7,7 @@ Uses BPSK Pilots for Coherency and Syncronization
 One (1) frame of BPSK pilots (also used for sync), and eight (8) frames of QPSK data.
 
 #### Examples
-This spectrum produced with: $ ./qpsk  
+This spectrum produced with: $ ./modulate  
 
 ![My image](https://raw.githubusercontent.com/srsampson/SingleCarrier/master/spectrum-filtered.png)
 
@@ -21,6 +21,6 @@ Here's what it looks like on the FreeDV display:
 
 ![My image](https://raw.githubusercontent.com/srsampson/SingleCarrier/master/waveform.png)
 
-Here's what the demodulator see's after the FIR filter:
+This demodulator spectrum (after FIR filtering) produced with: $ ./demodulate  
 
 ![My image](https://raw.githubusercontent.com/srsampson/SingleCarrier/master/demod.png)
