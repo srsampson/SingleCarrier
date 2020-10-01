@@ -21,3 +21,6 @@ Here's what it looks like on the FreeDV display:
 
 ![My image](https://raw.githubusercontent.com/srsampson/SingleCarrier/master/waveform.png)
 
+Here's what the demodulator see's after the FIR filter:
+
+![My image](https://raw.githubusercontent.com/srsampson/SingleCarrier/master/demod.png)
