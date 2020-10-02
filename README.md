@@ -6,21 +6,6 @@ The design is driven by the FreeDV 2020 Specifications which were originally des
 
 1600 Baud QPSK or 2-bits per symbol is 3000 bit/sec. The pilots use BPSK for both Coherency and in this modem can also be used for syncronization. One (1) frame of BPSK pilots/sync, and eight (8) frames of QPSK data.
 
-#### Examples
-This spectrum produced with: $ ./modulate  
+In order to center in the audio passband of the transmitter, I chose 1200 Hz. This gives a 400 Hz to 2 kHz spectrum, or 1600 Hz bandwidth. Using a Root Raised Cosine filter at the transmitter and receiver, we can improve the design for digital data. I selected a .35 beta which provides a nice narrow spectrum. This can be optimized later. 
 
 ![My image](https://raw.githubusercontent.com/srsampson/SingleCarrier/master/spectrum-filtered.png)
-
-FIR filter with 1200 Hz center Frequency, .35 alpha Root Raised Cosine Filter
-
-Here's the waveform idea in the time domain:
-
-![My image](https://raw.githubusercontent.com/srsampson/SingleCarrier/master/time-domain.png)
-
-Here's what it looks like on the FreeDV display:
-
-![My image](https://raw.githubusercontent.com/srsampson/SingleCarrier/master/waveform.png)
-
-This demodulator spectrum (after FIR filtering) produced with: $ ./demodulate  
-
-![My image](https://raw.githubusercontent.com/srsampson/SingleCarrier/master/demod.png)
