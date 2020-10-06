@@ -10,5 +10,16 @@ In order to center in the audio passband of the transmitter, I chose 1200 Hz. Th
 
 ![My image](https://raw.githubusercontent.com/srsampson/SingleCarrier/master/spectrum-filtered.png)
 
+The web tool I used is at: https://www-users.cs.york.ac.uk/~fisher/mkfilter/racos.html
+
+The values I input were:
+
+Sample Rate: 8000 Hz  
+Corner Frequency: 800 Hz  
+Beta: .35  
+Impulse Length: 41  
+Sqrt Response Raised Cosine filter type  
+
 Here's the output spectrum from the demodulator:
+
 ![My image](https://raw.githubusercontent.com/srsampson/SingleCarrier/master/demod.png)
