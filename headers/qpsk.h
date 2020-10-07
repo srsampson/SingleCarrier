@@ -22,6 +22,8 @@ extern "C"
 #define SCALE           4096.0f
 
 #define PILOT_SYMBOLS   33
+#define DATA_SYMBOLS    31
+    
 #define PILOT_SAMPLES   165
 #define DATA_SAMPLES    1240
 #define FRAME_SIZE      (PILOT_SAMPLES + DATA_SAMPLES)
@@ -68,5 +70,4 @@ void receive_frame(int16_t [], int *, FILE *);
 #ifdef __cplusplus
 }
 #endif
-
 

@@ -20,7 +20,7 @@ static complex float rx_filter[NZEROS];
 static complex float rx_frame[RX_SAMPLES_SIZE * 2];
 static complex float proc_frame[RX_SAMPLES_SIZE];
 
-static float pilot_table[PILOT_SAMPLES];
+static complex float pilot_table[PILOT_SYMBOLS];
 
 static int16_t tx_samples[TX_SAMPLES_SIZE];
 
@@ -52,6 +52,10 @@ const int8_t pilotvalues[] = {
     1, 1, 1, 1, -1, 1, -1, 1
 };
 
+/*
+ * Digital filter designed by mkfilter/mkshape/gencode
+ * A.J. Fisher
+ */
 static const float rrccoeff[] = {
     0.0020423298, 0.0119232360, 0.0133470732, 0.0030905368,
     -0.0138171019, -0.0254514870, -0.0196589480, 0.0071235033,
@@ -72,6 +76,7 @@ static float cnormf(complex float val) {
 
     return realf * realf + imagf * imagf;
 }
+
 /*
  * Root Raised Cosine FIR .35 beta
  */
@@ -94,14 +99,14 @@ static complex float rx_fir(complex float *sample) {
 /*
  * Sliding Window
  */
-static float correlate_pilots(complex float sample[], int index) {
-    float out = 0.0f;
+static float correlate_pilots(complex float symbol[], int index) {
+    complex float out = 0.0f;
 
-    for (int i = 0, j = index; i < PILOT_SAMPLES; i++, j++) {
-        out += (crealf(sample[j]) * pilot_table[i]);
+    for (int i = 0, j = index; i < PILOT_SYMBOLS; i++, j++) {
+        out += (symbol[j] * pilot_table[i]);
     }
 
-    return sqrtf(out * out);
+    return cnormf(out);
 }
 
 /*
@@ -127,7 +132,7 @@ void receive_frame(int16_t in[], int *bits, FILE *fout) {
         // testing
         pcm[i] = (int16_t) (crealf(proc_frame[i]) * 1024.0f);
     }
-
+    
     fwrite(pcm, sizeof (int16_t), (RX_SAMPLES_SIZE / CYCLES), fout);
 
     /* Hunting for the pilot preamble sequence */
@@ -136,7 +141,7 @@ void receive_frame(int16_t in[], int *bits, FILE *fout) {
     float max_value = 0.0f;
     int max_index = 0;
 
-    for (int i = 0; i < (RX_SAMPLES_SIZE / CYCLES); i++) {
+    for (int i = 0; i < PILOT_SYMBOLS; i++) {
         temp_value = correlate_pilots(proc_frame, i);
 
         if (temp_value > max_value) {
@@ -145,9 +150,16 @@ void receive_frame(int16_t in[], int *bits, FILE *fout) {
         }
     }
 
-    // unknown if correct yet
+    // find BPSK pilots
 
     printf("Max Index = %d\n", max_index);
+    
+    /*
+     * figure out QPSK bits
+     */
+    //for (int i = 0, j = 0; i < (DATA_SYMBOLS * 8); i++, j++) {
+        
+    //}
 }
 
 /*
@@ -226,13 +238,13 @@ void tx_frame_reset() {
  * Transmit null
  */
 static void flush() {
-    complex float symbol[4];
+    complex float symbol[CYCLES];
 
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < CYCLES; i++) {
         symbol[i] = 0.0f;
     }
 
-    tx_frame(symbol, 4);
+    tx_frame(symbol, CYCLES);
 }
 
 void bpsk_modulate(int tx_bits[], int length) {
@@ -279,10 +291,8 @@ int main(int argc, char** argv) {
     /*
      * Create a float table of pilot values
      */
-    for (int i = 0; i < PILOT_SAMPLES; i += CYCLES) {
-        for (int j = 0; j < CYCLES; j++) {
-            pilot_table[i + j] = (float) pilotvalues[i]; // -1 or 1
-        }
+    for (int i = 0; i < PILOT_SYMBOLS; i++) {
+        pilot_table[i] = (float) pilotvalues[i]; // complex -1 or 1
     }
 
     /*
@@ -345,4 +355,3 @@ int main(int argc, char** argv) {
 
     return (EXIT_SUCCESS);
 }
-
