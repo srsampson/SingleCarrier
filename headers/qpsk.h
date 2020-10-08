@@ -38,7 +38,7 @@ extern "C"
 #endif
 
 #define TAU         (2.0f * M_PI)
-#define ROT45       (M_PI / 4.0f)
+#define ROTATE45       (M_PI / 4.0f)
 
 #define cmplx(value) (cosf(value) + sinf(value) * I)
 #define cmplxconj(value) (cosf(value) + sinf(value) * -I)

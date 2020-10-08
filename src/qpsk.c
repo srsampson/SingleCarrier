@@ -49,16 +49,18 @@ static int tx_sample_offset;
 
 /*
  * QPSK Quadrant bit-pair values - Gray Coded
+ * Non-static so they can be used by other modules
  */
 const complex float constellation[] = {
-    1.0f + 0.0f * I,
-    0.0f + 1.0f * I,
-    0.0f - 1.0f * I,
-    -1.0f + 0.0f * I
+    1.0f + 0.0f * I,    //  I
+    0.0f + 1.0f * I,    //  Q
+    0.0f - 1.0f * I,    // -Q
+    -1.0f + 0.0f * I    // -I
 };
 
 /*
  * These pilots are compatible with Octave version
+ * Non-static so they can be used by other modules
  */
 const int8_t pilotvalues[] = {
     -1, -1, 1, 1, -1, -1, -1, 1,
@@ -73,7 +75,13 @@ const int8_t pilotvalues[] = {
 
 /*
  * Digital filter designed by mkfilter/mkshape/gencode
- * A.J. Fisher
+ * 
+ * Root Raised Cosine Coefficients
+ * 
+ * 8 kHz sample rate, 1600 Baud with impulse length of 41,
+ * using .35 beta
+ * 
+ * A.J. Fisher Design
  */
 static const float rrccoeff[] = {
     0.0020423298f, 0.0119232360f, 0.0133470732f, 0.0030905368f,
@@ -99,7 +107,7 @@ static float cnormf(complex float val) {
 }
 
 /*
- * Root Raised Cosine FIR
+ * FIR Filter with specified impulse length
  */
 static complex float fir(complex float *memory, complex float sample[], int index) {
     for (int i = 0; i < (NZEROS - 1); i++) {
@@ -185,6 +193,14 @@ void rx_frame(int16_t in[], int *bits, FILE *fout) {
 
 /*
  * Gray coded QPSK modulation function
+ * 
+ *      Q
+ *      |
+ * -I---+---I
+ *      |
+ *     -Q
+ * 
+ * The symbols are not rotated on transmit
  */
 complex float qpsk_mod(int *bits) {
     return constellation[(bits[1] << 1) | bits[0]];
@@ -193,12 +209,22 @@ complex float qpsk_mod(int *bits) {
 /*
  * Gray coded QPSK demodulation function
  *
- * 01 | 00
- * ---+---
- * 11 | 10
+ *  Q 01   00 I
+ *     \ | /
+ *      \|/
+ *   ----+----
+ *      /|\
+ *     / | \
+ * -I 11   10 Q
+ * 
+ * By rotating received symbol 45 degrees left the
+ * bits are easier to decode as they are in a specific
+ * rectangular quadrant.
+ * 
+ * Each bit pair differs from the next by only one bit.
  */
 void qpsk_demod(complex float symbol, int *bits) {
-    complex float rotate = symbol * cmplx(ROT45);
+    complex float rotate = symbol * cmplx(ROTATE45);
 
     bits[0] = crealf(rotate) < 0.0f;
     bits[1] = cimagf(rotate) < 0.0f;
