@@ -226,8 +226,8 @@ complex float qpsk_mod(int *bits) {
 void qpsk_demod(complex float symbol, int *bits) {
     complex float rotate = symbol * cmplx(ROTATE45);
 
-    bits[0] = crealf(rotate) < 0.0f;
-    bits[1] = cimagf(rotate) < 0.0f;
+    bits[0] = crealf(rotate) < 0.0f;    // I < 0 ?
+    bits[1] = cimagf(rotate) < 0.0f;    // Q < 0 ?
 }
 
 static complex float vector_sum(complex float *a, int num_elements) {
@@ -240,6 +240,11 @@ static complex float vector_sum(complex float *a, int num_elements) {
     return sum;
 }
 
+/*
+ * Encode the symbol while upsampling to 8 kHz sample rate
+ * using the root raised cosine filter, and a center frequency
+ * of 1200 Hz to center the audio in the 300 to 3 kHz limits
+ */
 void tx_frame(complex float symbol[], int length) {
     for (int k = 0; k < length; k++) {
         /*
@@ -270,7 +275,7 @@ void tx_frame_reset() {
 }
 
 /*
- * Transmit null
+ * Transmit CYCLES (5) null symbols
  */
 void tx_flush() {
     complex float symbol[CYCLES];
@@ -286,7 +291,7 @@ void bpsk_modulate(int tx_bits[], int length) {
     complex float symbol[length];
 
     for (int i = 0; i < length; i++) {
-        symbol[i] = (float) tx_bits[i];
+        symbol[i] = ((float) tx_bits[i]) + 0.0f * I;
     }
 
     tx_frame(symbol, length);
@@ -318,8 +323,8 @@ int main(int argc, char** argv) {
     rx_osc_offset = 0;
 
     /*
-     * Create an oscillator table for the selected
-     * center frequency of 1200 Hz
+     * Create an oscillator sample table for the
+     * selected center frequency of 1200 Hz
      */
     for (int i = 0; i < OSC_TABLE_SIZE; i++) {
         osc_table[i] = cmplx(TAU * CENTER * ((float) i / FS));
@@ -335,15 +340,22 @@ int main(int argc, char** argv) {
     /*
      * create the BPSK/QPSK pilot time-domain waveform
      */
-
     fout = fopen(TX_FILENAME, "wb");
 
+    /*
+     * Initialize the FIR filter memory for
+     * this transmission of packets
+     */
     flush_fir_memory(tx_filter);
-    tx_flush();
-
+    
+    /*
+     * This simulates the transmitted packets
+     */
     for (int k = 0; k < 500; k++) {
         tx_frame_reset();
 
+        tx_flush();
+    
         // 33 BPSK pilots
         for (int i = 0; i < PILOT_SYMBOLS; i++) {
             bits[i] = pilotvalues[i];
@@ -361,7 +373,7 @@ int main(int argc, char** argv) {
                 bits[i] = rand() % 2;
                 bits[i + 1] = rand() % 2;
             }
-
+            
             qpsk_modulate(bits, DATA_SYMBOLS);
         }
 
