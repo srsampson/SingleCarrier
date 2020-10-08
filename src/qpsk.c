@@ -215,7 +215,7 @@ complex float qpsk_mod(int *bits) {
  *   ----+----
  *      /|\
  *     / | \
- * -I 11   10 Q
+ * -I 11   10 -Q
  * 
  * By rotating received symbol 45 degrees left the
  * bits are easier to decode as they are in a specific
