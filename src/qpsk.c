@@ -231,11 +231,11 @@ void tx_frame(complex float symbol[], int length) {
 }
 
 /*
- * Zero out the FIR buffer
+ * Zero out the selected FIR delay memory
  */
-void flush_tx_filter() {
+void flush_fir_memory(complex float *memory) {
     for (int i = 0; i < NZEROS; i++) {
-        tx_filter[i] = 0.0f;
+        memory[i] = 0.0f;
     }
 }
 
@@ -312,7 +312,7 @@ int main(int argc, char** argv) {
 
     fout = fopen(TX_FILENAME, "wb");
 
-    flush_tx_filter();
+    flush_fir_memory(tx_filter);
     flush();
 
     for (int k = 0; k < 500; k++) {
