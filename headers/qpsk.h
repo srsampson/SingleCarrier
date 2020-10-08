@@ -16,6 +16,7 @@ extern "C"
 
 #define FS              8000.0f
 #define RS              1600.0f
+#define NS              8
 #define TS              (1.0f / RS)
 #define CYCLES          (int) (FS / RS)
 #define CENTER          1200.0f
@@ -24,8 +25,8 @@ extern "C"
 #define PILOT_SYMBOLS   33
 #define DATA_SYMBOLS    31
     
-#define PILOT_SAMPLES   165
-#define DATA_SAMPLES    1240
+#define PILOT_SAMPLES   (PILOT_SYMBOLS * CYCLES)
+#define DATA_SAMPLES    (DATA_SYMBOLS * CYCLES * NS)
 #define FRAME_SIZE      (PILOT_SAMPLES + DATA_SAMPLES)
 
 // @ (33 * 5) + ((31 * 5) * 8)
@@ -70,4 +71,3 @@ void receive_frame(int16_t [], int *, FILE *);
 #ifdef __cplusplus
 }
 #endif
-

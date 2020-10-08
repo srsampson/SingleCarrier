@@ -8,6 +8,10 @@
 
 #include "qpsk.h"
 
+static complex float fir(complex float *, complex float [], int);
+static float correlate_pilots(complex float [], int);
+static complex float vector_sum(complex float *, int);
+
 #define TX_FILENAME "/tmp/spectrum-filtered.raw"
 #define RX_FILENAME "/tmp/spectrum.raw"
 
@@ -57,17 +61,17 @@ const int8_t pilotvalues[] = {
  * A.J. Fisher
  */
 static const float rrccoeff[] = {
-    0.0020423298, 0.0119232360, 0.0133470732, 0.0030905368,
-    -0.0138171019, -0.0254514870, -0.0196589480, 0.0071235033,
-    0.0442307140, 0.0689148706, 0.0571180020, -0.0013440359,
-    -0.0909920934, -0.1698743515, -0.1827969854, -0.0846912701,
-    0.1357337643, 0.4435364036, 0.7637556509, 1.0056258619,
-    1.0956360553, 1.0056258619, 0.7637556509, 0.4435364036,
-    0.1357337643, -0.0846912701, -0.1827969854, -0.1698743515,
-    -0.0909920934, -0.0013440359, 0.0571180020, 0.0689148706,
-    0.0442307140, 0.0071235033, -0.0196589480, -0.0254514870,
-    -0.0138171019, 0.0030905368, 0.0133470732, 0.0119232360,
-    0.0020423298
+    0.0020423298f, 0.0119232360f, 0.0133470732f, 0.0030905368f,
+    -0.0138171019f, -0.0254514870f, -0.0196589480f, 0.0071235033f,
+    0.0442307140f, 0.0689148706f, 0.0571180020f, -0.0013440359f,
+    -0.0909920934f, -0.1698743515f, -0.1827969854f, -0.0846912701f,
+    0.1357337643f, 0.4435364036f, 0.7637556509f, 1.0056258619f,
+    1.0956360553f, 1.0056258619f, 0.7637556509f, 0.4435364036f,
+    0.1357337643f, -0.0846912701f, -0.1827969854f, -0.1698743515f,
+    -0.0909920934f, -0.0013440359f, 0.0571180020f, 0.0689148706f,
+    0.0442307140f, 0.0071235033f, -0.0196589480f, -0.0254514870f,
+    -0.0138171019f, 0.0030905368f, 0.0133470732f, 0.0119232360f,
+    0.0020423298f
 };
 
 static float cnormf(complex float val) {
@@ -78,19 +82,19 @@ static float cnormf(complex float val) {
 }
 
 /*
- * Root Raised Cosine FIR .35 beta
+ * Root Raised Cosine FIR
  */
-static complex float rx_fir(complex float *sample) {
+static complex float fir(complex float *memory, complex float sample[], int index) {
     for (int i = 0; i < (NZEROS - 1); i++) {
-        rx_filter[i] = rx_filter[i + 1];
+        memory[i] = memory[i + 1];
     }
 
-    rx_filter[(NZEROS - 1)] = *sample;
+    memory[(NZEROS - 1)] = sample[index];
 
-    complex float y = 0.0;
+    complex float y = 0.0f;
 
     for (int i = 0; i < NZEROS; i++) {
-        y += (rx_filter[i] * rrccoeff[i]);
+        y += (memory[i] * rrccoeff[i]);
     }
 
     return y;
@@ -127,7 +131,7 @@ void receive_frame(int16_t in[], int *bits, FILE *fout) {
 
     for (int i = 0; i < (RX_SAMPLES_SIZE / CYCLES); i++) {
         proc_frame[i] = proc_frame[(RX_SAMPLES_SIZE / CYCLES) + i];
-        proc_frame[(RX_SAMPLES_SIZE / CYCLES) + i] = rx_fir(&rx_frame[i * CYCLES]);
+        proc_frame[(RX_SAMPLES_SIZE / CYCLES) + i] = fir(rx_filter, rx_frame, (i * CYCLES));
 
         // testing
         pcm[i] = (int16_t) (crealf(proc_frame[i]) * 1024.0f);
@@ -157,7 +161,7 @@ void receive_frame(int16_t in[], int *bits, FILE *fout) {
     /*
      * figure out QPSK bits
      */
-    //for (int i = 0, j = 0; i < (DATA_SYMBOLS * 8); i++, j++) {
+    //for (int i = 0; i < (DATA_SYMBOLS * NS); i++) {
         
     //}
 }
@@ -193,26 +197,14 @@ static complex float vector_sum(complex float *a, int num_elements) {
     return sum;
 }
 
-static void tx_frame(complex float symbol[], int length) {
+void tx_frame(complex float symbol[], int length) {
     for (int k = 0; k < length; k++) {
         /*
-         * At the 8 kHz sample rate, we will need
-         * 5 cycles of the symbol for 1600 baud
+         * At the 8 kHz sample rate, we will need to
+         * upsample 5 cycles of the symbol for 1600 baud
          */
         for (int j = 0; j < CYCLES; j++) {
-            for (int i = 0; i < (NZEROS - 1); i++) {
-                tx_filter[i] = tx_filter[i + 1];
-            }
-
-            tx_filter[(NZEROS - 1)] = symbol[k];
-
-            complex float y = 0.0f;
-
-            for (int i = 0; i < NZEROS; i++) {
-                y += tx_filter[i] * rrccoeff[i];
-            }
-
-            y *= osc_table[tx_osc_offset];
+            complex float y = fir(tx_filter, symbol, k) * osc_table[tx_osc_offset];
             tx_osc_offset = (tx_osc_offset + 1) % OSC_TABLE_SIZE;
 
             tx_samples[tx_sample_offset] = (int16_t) (crealf(y) * SCALE);
@@ -224,7 +216,7 @@ static void tx_frame(complex float symbol[], int length) {
 /*
  * Zero out the FIR buffer
  */
-static void flush_tx_filter() {
+void flush_tx_filter() {
     for (int i = 0; i < NZEROS; i++) {
         tx_filter[i] = 0.0f;
     }
@@ -237,7 +229,7 @@ void tx_frame_reset() {
 /*
  * Transmit null
  */
-static void flush() {
+void flush() {
     complex float symbol[CYCLES];
 
     for (int i = 0; i < CYCLES; i++) {
