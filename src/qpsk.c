@@ -36,8 +36,8 @@ static FILE *fout;
 static complex float osc_table[OSC_TABLE_SIZE];
 static complex float tx_filter[NZEROS];
 static complex float rx_filter[NZEROS];
-static complex float rx_frame[RX_SAMPLES_SIZE * 2];
-static complex float proc_frame[RX_SAMPLES_SIZE];
+static complex float input_frame[RX_SAMPLES_SIZE * 2];
+static complex float process_frame[RX_SAMPLES_SIZE];
 
 static complex float pilot_table[PILOT_SYMBOLS];
 
@@ -133,25 +133,25 @@ static float correlate_pilots(complex float symbol[], int index) {
 /*
  * Receive function
  */
-void receive_frame(int16_t in[], int *bits, FILE *fout) {
+void rx_frame(int16_t in[], int *bits, FILE *fout) {
     int16_t pcm[(RX_SAMPLES_SIZE / CYCLES)];
 
     for (int i = 0; i < RX_SAMPLES_SIZE; i++) {
         float val = (float) in[i] / SCALE;
 
-        rx_frame[i] = rx_frame[RX_SAMPLES_SIZE + i];
-        rx_frame[RX_SAMPLES_SIZE + i] = osc_table[rx_osc_offset] * val;
+        input_frame[i] = input_frame[RX_SAMPLES_SIZE + i];
+        input_frame[RX_SAMPLES_SIZE + i] = osc_table[rx_osc_offset] * val;
         rx_osc_offset = (rx_osc_offset + 1) % OSC_TABLE_SIZE;
     }
 
     // Downsample the 5 cycles at 8 kHz Sample rate for 1600 Baud
 
     for (int i = 0; i < (RX_SAMPLES_SIZE / CYCLES); i++) {
-        proc_frame[i] = proc_frame[(RX_SAMPLES_SIZE / CYCLES) + i];
-        proc_frame[(RX_SAMPLES_SIZE / CYCLES) + i] = fir(rx_filter, rx_frame, (i * CYCLES));
+        process_frame[i] = process_frame[(RX_SAMPLES_SIZE / CYCLES) + i];
+        process_frame[(RX_SAMPLES_SIZE / CYCLES) + i] = fir(rx_filter, input_frame, (i * CYCLES));
 
         // testing
-        pcm[i] = (int16_t) (crealf(proc_frame[i]) * 1024.0f);
+        pcm[i] = (int16_t) (crealf(process_frame[i]) * 1024.0f);
     }
     
     fwrite(pcm, sizeof (int16_t), (RX_SAMPLES_SIZE / CYCLES), fout);
@@ -163,7 +163,7 @@ void receive_frame(int16_t in[], int *bits, FILE *fout) {
     int max_index = 0;
 
     for (int i = 0; i < PILOT_SYMBOLS; i++) {
-        temp_value = correlate_pilots(proc_frame, i);
+        temp_value = correlate_pilots(process_frame, i);
 
         if (temp_value > max_value) {
             max_value = temp_value;
@@ -357,7 +357,7 @@ int main(int argc, char** argv) {
         if (count != RX_SAMPLES_SIZE)
             break;
 
-        receive_frame(frame, bits, fout);
+        rx_frame(frame, bits, fout);
     }
 
     fflush(fout);

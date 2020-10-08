@@ -61,12 +61,15 @@ typedef enum
 
 /* Prototypes */
 
+void flush_fir_memory(complex float *memory);
+void flush(void);
 complex float qpsk_mod(int *);
 void qpsk_demod(complex float, int *);
 void bpsk_modulate(int [], int);
 void qpsk_modulate(int [], int);
-void rx_frame_init(void);
-void receive_frame(int16_t [], int *, FILE *);
+void tx_frame(complex float [], int);
+void tx_frame_reset(void);
+void rx_frame(int16_t [], int *, FILE *);
 
 #ifdef __cplusplus
 }
