@@ -1,3 +1,12 @@
+/*
+ * qpsk.c
+ *
+ * Testing program for qpsk modem algorithms
+ * October 2020
+ */
+
+// Includes
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -8,12 +17,18 @@
 
 #include "qpsk.h"
 
+// Prototypes
+
+static float cnormf(complex float);
 static complex float fir(complex float *, complex float [], int);
 static float correlate_pilots(complex float [], int);
 static complex float vector_sum(complex float *, int);
 
+// Defines
 #define TX_FILENAME "/tmp/spectrum-filtered.raw"
 #define RX_FILENAME "/tmp/spectrum.raw"
+
+// Globals
 
 static FILE *fin;
 static FILE *fout;
@@ -73,6 +88,8 @@ static const float rrccoeff[] = {
     -0.0138171019f, 0.0030905368f, 0.0133470732f, 0.0119232360f,
     0.0020423298f
 };
+
+// Functions
 
 static float cnormf(complex float val) {
     float realf = crealf(val);
@@ -262,6 +279,8 @@ void qpsk_modulate(int tx_bits[], int length) {
 
     tx_frame(symbol, length);
 }
+
+// Main Program
 
 int main(int argc, char** argv) {
     int bits[6400];
