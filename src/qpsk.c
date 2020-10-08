@@ -246,7 +246,7 @@ void tx_frame_reset() {
 /*
  * Transmit null
  */
-void flush() {
+void tx_flush() {
     complex float symbol[CYCLES];
 
     for (int i = 0; i < CYCLES; i++) {
@@ -270,7 +270,7 @@ void qpsk_modulate(int tx_bits[], int length) {
     complex float symbol[length];
     int dibit[2];
 
-    for (int s = 0, i = 0; i < length; s += 2, i++) {
+    for (int i = 0, s = 0; i < length; i++, s += 2) {
         dibit[0] = tx_bits[s + 1] & 0x1;
         dibit[1] = tx_bits[s ] & 0x1;
 
@@ -313,30 +313,30 @@ int main(int argc, char** argv) {
     fout = fopen(TX_FILENAME, "wb");
 
     flush_fir_memory(tx_filter);
-    flush();
+    tx_flush();
 
     for (int k = 0; k < 500; k++) {
         tx_frame_reset();
 
         // 33 BPSK pilots
-        for (int i = 0; i < 33; i++) {
+        for (int i = 0; i < PILOT_SYMBOLS; i++) {
             bits[i] = pilotvalues[i];
         }
 
-        bpsk_modulate(bits, 33);
-        flush();
+        bpsk_modulate(bits, PILOT_SYMBOLS);
+        tx_flush();
 
         /*
-         * 8 frames of data to each pilot frame
+         * NS data frames between each pilot frame
          */
-        for (int j = 0; j < 8; j++) {
+        for (int j = 0; j < NS; j++) {
             // 31 QPSK
-            for (int i = 0; i < 62; i += 2) {
+            for (int i = 0; i < (DATA_SYMBOLS * 2); i += 2) {
                 bits[i] = rand() % 2;
                 bits[i + 1] = rand() % 2;
             }
 
-            qpsk_modulate(bits, 31);
+            qpsk_modulate(bits, DATA_SYMBOLS);
         }
 
         fwrite(tx_samples, sizeof (int16_t), tx_sample_offset, fout);
