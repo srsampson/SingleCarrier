@@ -22,4 +22,4 @@ Sqrt Response Raised Cosine filter type
 
 Here's the output spectrum from the demodulator:
 
-![My image](https://raw.githubusercontent.com/srsampson/SingleCarrier/master/docs/demod.png)
+![My image](https://raw.githubusercontent.com/srsampson/SingleCarrier/master/docs/spectrum.png)
