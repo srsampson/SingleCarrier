@@ -20,7 +20,6 @@ extern "C"
 #define TS              (1.0f / RS)
 #define CYCLES          (int) (FS / RS)
 #define CENTER          1200.0f
-#define SCALE           4096.0f
 
 #define PILOT_SYMBOLS   33
 #define DATA_SYMBOLS    31
@@ -61,15 +60,19 @@ typedef enum
 
 /* Prototypes */
 
-complex float qpsk_mod(int *);
-void qpsk_demod(complex float, int *);
+complex float qpsk_mod(int []);
+void qpsk_demod(complex float, int []);
+
 void flush_fir_memory(complex float *memory);
-void bpsk_modulate(int [], int);
+
+void bpsk_modulate(void);
 void qpsk_modulate(int [], int);
+
 void tx_frame(complex float [], int);
 void tx_frame_reset(void);
 void tx_flush(void);
-void rx_frame(int16_t [], int *, FILE *);
+
+void rx_frame(int16_t [], int []);
 
 #ifdef __cplusplus
 }

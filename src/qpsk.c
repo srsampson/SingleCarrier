@@ -1,3 +1,4 @@
+#define TEST1
 /*
  * qpsk.c
  *
@@ -36,8 +37,8 @@ static FILE *fout;
 static complex float osc_table[OSC_TABLE_SIZE];
 static complex float tx_filter[NZEROS];
 static complex float rx_filter[NZEROS];
-static complex float input_frame[RX_SAMPLES_SIZE * 2];
-static complex float process_frame[RX_SAMPLES_SIZE];
+static complex float input_frame[RX_SAMPLES_SIZE * 2];  // Input Samples * 2
+static complex float process_frame[RX_SAMPLES_SIZE];    // Input Symbols * 2
 
 static complex float pilot_table[PILOT_SYMBOLS];
 
@@ -141,36 +142,47 @@ static float correlate_pilots(complex float symbol[], int index) {
 /*
  * Receive function
  */
-void rx_frame(int16_t in[], int *bits, FILE *fout) {
-    int16_t pcm[(RX_SAMPLES_SIZE / CYCLES)];
-
+void rx_frame(int16_t in[], int bits[]) {
     for (int i = 0; i < RX_SAMPLES_SIZE; i++) {
-        float val = (float) in[i] / SCALE;
+        float val = (float) in[i] / 2048.0f;
 
         input_frame[i] = input_frame[RX_SAMPLES_SIZE + i];
         input_frame[RX_SAMPLES_SIZE + i] = osc_table[rx_osc_offset] * val;
         rx_osc_offset = (rx_osc_offset + 1) % OSC_TABLE_SIZE;
     }
 
-    // Downsample the 5 cycles at 8 kHz Sample rate for 1600 Baud
+    // Downsample the 5 cycles at 8 kHz Sample rate to symbols (1600 Baud)
+    // There will be two frames of symbols in order to slide the window
+    // past the first half during processing.
 
     for (int i = 0; i < (RX_SAMPLES_SIZE / CYCLES); i++) {
         process_frame[i] = process_frame[(RX_SAMPLES_SIZE / CYCLES) + i];
         process_frame[(RX_SAMPLES_SIZE / CYCLES) + i] = fir(rx_filter, input_frame, (i * CYCLES));
+    }
 
-        // testing
-        pcm[i] = (int16_t) (crealf(process_frame[i]) * 1024.0f);
+    int dibit[2];
+
+#ifdef TEST1
+    // So far this test shows crap
+    
+    for (int i = 0; i < (RX_SAMPLES_SIZE / CYCLES); i++) {
+        complex float symbol = process_frame[i];
+        qpsk_demod(symbol, dibit);
+        
+        printf("%d%d ", dibit[1], dibit[0]);
     }
     
-    fwrite(pcm, sizeof (int16_t), (RX_SAMPLES_SIZE / CYCLES), fout);
-
+    printf("\n\n");
+#endif
+    
+#ifdef TEST2
     /* Hunting for the pilot preamble sequence */
 
     float temp_value = 0.0f;
     float max_value = 0.0f;
     int max_index = 0;
 
-    for (int i = 0; i < PILOT_SYMBOLS; i++) {
+    for (int i = 0; i < (RX_SAMPLES_SIZE / CYCLES); i++) {
         temp_value = correlate_pilots(process_frame, i);
 
         if (temp_value > max_value) {
@@ -178,17 +190,18 @@ void rx_frame(int16_t in[], int *bits, FILE *fout) {
             max_index = i;
         }
     }
-
-    // find BPSK pilots
-
-    printf("Max Index = %d\n", max_index);
     
-    /*
-     * figure out QPSK bits
-     */
-    //for (int i = 0; i < (DATA_SYMBOLS * NS); i++) {
+    printf("%d\n", max_index);
+    
+    for (int i = max_index; i < (max_index + PILOT_SYMBOLS); i++) {
+        complex float symbol = process_frame[i];
+        qpsk_demod(symbol, dibit);
         
-    //}
+        printf("%d%d ", dibit[1], dibit[0]);
+    }
+    
+    printf("\n");
+#endif
 }
 
 /*
@@ -202,7 +215,7 @@ void rx_frame(int16_t in[], int *bits, FILE *fout) {
  * 
  * The symbols are not rotated on transmit
  */
-complex float qpsk_mod(int *bits) {
+complex float qpsk_mod(int bits[]) {
     return constellation[(bits[1] << 1) | bits[0]];
 }
 
@@ -223,7 +236,7 @@ complex float qpsk_mod(int *bits) {
  * 
  * Each bit pair differs from the next by only one bit.
  */
-void qpsk_demod(complex float symbol, int *bits) {
+void qpsk_demod(complex float symbol, int bits[]) {
     complex float rotate = symbol * cmplx(ROTATE45);
 
     bits[0] = crealf(rotate) < 0.0f;    // I < 0 ?
@@ -255,7 +268,7 @@ void tx_frame(complex float symbol[], int length) {
             complex float y = fir(tx_filter, symbol, k) * osc_table[tx_osc_offset];
             tx_osc_offset = (tx_osc_offset + 1) % OSC_TABLE_SIZE;
 
-            tx_samples[tx_sample_offset] = (int16_t) (crealf(y) * SCALE);
+            tx_samples[tx_sample_offset] = (int16_t) (crealf(y) * 2048.0f);
             tx_sample_offset = (tx_sample_offset + 1) % TX_SAMPLES_SIZE;
         }
     }
@@ -287,14 +300,8 @@ void tx_flush() {
     tx_frame(symbol, CYCLES);
 }
 
-void bpsk_modulate(int tx_bits[], int length) {
-    complex float symbol[length];
-
-    for (int i = 0; i < length; i++) {
-        symbol[i] = ((float) tx_bits[i]) + 0.0f * I;
-    }
-
-    tx_frame(symbol, length);
+void bpsk_modulate() {
+    tx_frame(pilot_table, PILOT_SYMBOLS);
 }
 
 void qpsk_modulate(int tx_bits[], int length) {
@@ -331,10 +338,11 @@ int main(int argc, char** argv) {
     }
 
     /*
-     * Create a float table of pilot values
+     * Create a complex float table of pilot values
+     * for correlation algorithm
      */
     for (int i = 0; i < PILOT_SYMBOLS; i++) {
-        pilot_table[i] = (float) pilotvalues[i]; // complex -1 or 1
+        pilot_table[i] = ((float) pilotvalues[i] + 0.0f * I); // complex -1.0 or 1.0
     }
 
     /*
@@ -343,7 +351,7 @@ int main(int argc, char** argv) {
     fout = fopen(TX_FILENAME, "wb");
 
     /*
-     * Initialize the FIR filter memory for
+     * Initialize the tx FIR filter memory for
      * this transmission of packets
      */
     flush_fir_memory(tx_filter);
@@ -353,15 +361,10 @@ int main(int argc, char** argv) {
      */
     for (int k = 0; k < 500; k++) {
         tx_frame_reset();
-
         tx_flush();
     
         // 33 BPSK pilots
-        for (int i = 0; i < PILOT_SYMBOLS; i++) {
-            bits[i] = pilotvalues[i];
-        }
-
-        bpsk_modulate(bits, PILOT_SYMBOLS);
+        bpsk_modulate();
         tx_flush();
 
         /*
@@ -370,8 +373,8 @@ int main(int argc, char** argv) {
         for (int j = 0; j < NS; j++) {
             // 31 QPSK
             for (int i = 0; i < (DATA_SYMBOLS * 2); i += 2) {
-                bits[i] = rand() % 2;
-                bits[i + 1] = rand() % 2;
+                bits[i] = 0;//rand() % 2;
+                bits[i + 1] = 0;//rand() % 2;
             }
             
             qpsk_modulate(bits, DATA_SYMBOLS);
@@ -387,7 +390,6 @@ int main(int argc, char** argv) {
      * Now try to process what was transmitted
      */
     fin = fopen(TX_FILENAME, "r");
-    fout = fopen(RX_FILENAME, "wb");
 
     while (1) {
         size_t count = fread(frame, sizeof (int16_t), RX_SAMPLES_SIZE, fin);
@@ -395,11 +397,9 @@ int main(int argc, char** argv) {
         if (count != RX_SAMPLES_SIZE)
             break;
 
-        rx_frame(frame, bits, fout);
+        rx_frame(frame, bits);
     }
 
-    fflush(fout);
-    fclose(fout);
     fclose(fin);
 
     return (EXIT_SUCCESS);
