@@ -1,4 +1,4 @@
-#define TEST1
+#define TEST2
 /*
  * qpsk.c
  *
@@ -23,7 +23,7 @@
 static float cnormf(complex float);
 static complex float fir(complex float *, complex float [], int);
 static float correlate_pilots(complex float [], int);
-static complex float vector_sum(complex float *, int);
+static float magnitude_pilots(complex float [], int);
 
 // Defines
 #define TX_FILENAME "/tmp/spectrum-filtered.raw"
@@ -34,7 +34,6 @@ static complex float vector_sum(complex float *, int);
 static FILE *fin;
 static FILE *fout;
 
-static complex float osc_table[OSC_TABLE_SIZE];
 static complex float tx_filter[NZEROS];
 static complex float rx_filter[NZEROS];
 static complex float input_frame[RX_SAMPLES_SIZE * 2];  // Input Samples * 2
@@ -47,6 +46,9 @@ static int16_t tx_samples[TX_SAMPLES_SIZE];
 static int tx_osc_offset;
 static int rx_osc_offset;
 static int tx_sample_offset;
+static int sync_position;
+
+static complex float osc_table[OSC_FIXED_SIZE];
 
 /*
  * QPSK Quadrant bit-pair values - Gray Coded
@@ -139,6 +141,16 @@ static float correlate_pilots(complex float symbol[], int index) {
     return cnormf(out);
 }
 
+static float magnitude_pilots(complex float symbol[], int index) {
+    complex float out = 0.0f;
+    
+    for (int i = index; i < (PILOT_SYMBOLS + index); i++) {
+        out += symbol[i];
+    }
+
+    return cnormf(out);
+}
+
 /*
  * Receive function
  */
@@ -148,7 +160,7 @@ void rx_frame(int16_t in[], int bits[]) {
 
         input_frame[i] = input_frame[RX_SAMPLES_SIZE + i];
         input_frame[RX_SAMPLES_SIZE + i] = osc_table[rx_osc_offset] * val;
-        rx_osc_offset = (rx_osc_offset + 1) % OSC_TABLE_SIZE;
+        rx_osc_offset = (rx_osc_offset + 1) % OSC_FIXED_SIZE;
     }
 
     // Downsample the 5 cycles at 8 kHz Sample rate to symbols (1600 Baud)
@@ -165,6 +177,11 @@ void rx_frame(int16_t in[], int bits[]) {
 #ifdef TEST1
     // So far this test shows crap
     
+    // Since the QPSK are all 00 then all we should see is
+    // 11 for -1 and 00 for +1 but I'm seeing some 01 and 10 values.
+    //
+    // I'm not seeing the pilots at all
+    
     for (int i = 0; i < (RX_SAMPLES_SIZE / CYCLES); i++) {
         complex float symbol = process_frame[i];
         qpsk_demod(symbol, dibit);
@@ -180,6 +197,7 @@ void rx_frame(int16_t in[], int bits[]) {
 
     float temp_value = 0.0f;
     float max_value = 0.0f;
+    float mean = 0.0f;
     int max_index = 0;
 
     for (int i = 0; i < (RX_SAMPLES_SIZE / CYCLES); i++) {
@@ -191,16 +209,19 @@ void rx_frame(int16_t in[], int bits[]) {
         }
     }
     
-    printf("%d\n", max_index);
+    mean = magnitude_pilots(process_frame, max_index);
+    sync_position = max_index + PILOT_SYMBOLS;
     
-    for (int i = max_index; i < (max_index + PILOT_SYMBOLS); i++) {
+    printf("%d %.2f\n", max_index, mean);
+    
+    for (int i = sync_position; i < (PILOT_SYMBOLS + sync_position); i++) {
         complex float symbol = process_frame[i];
         qpsk_demod(symbol, dibit);
         
         printf("%d%d ", dibit[1], dibit[0]);
     }
     
-    printf("\n");
+    printf("\n\n");
 #endif
 }
 
@@ -243,16 +264,6 @@ void qpsk_demod(complex float symbol, int bits[]) {
     bits[1] = cimagf(rotate) < 0.0f;    // Q < 0 ?
 }
 
-static complex float vector_sum(complex float *a, int num_elements) {
-    complex float sum = 0.0f;
-
-    for (int i = 0; i < num_elements; i++) {
-        sum += a[i];
-    }
-
-    return sum;
-}
-
 /*
  * Encode the symbol while upsampling to 8 kHz sample rate
  * using the root raised cosine filter, and a center frequency
@@ -265,8 +276,8 @@ void tx_frame(complex float symbol[], int length) {
          * upsample 5 cycles of the symbol for 1600 baud
          */
         for (int j = 0; j < CYCLES; j++) {
-            complex float y = fir(tx_filter, symbol, k) * osc_table[tx_osc_offset];
-            tx_osc_offset = (tx_osc_offset + 1) % OSC_TABLE_SIZE;
+            complex float y = osc_table[tx_osc_offset] * fir(tx_filter, symbol, k);
+            tx_osc_offset = (tx_osc_offset + 1) % OSC_FIXED_SIZE;
 
             tx_samples[tx_sample_offset] = (int16_t) (crealf(y) * 2048.0f);
             tx_sample_offset = (tx_sample_offset + 1) % TX_SAMPLES_SIZE;
@@ -285,6 +296,7 @@ void flush_fir_memory(complex float *memory) {
 
 void tx_frame_reset() {
     tx_sample_offset = 0;
+    tx_osc_offset = 0;
 }
 
 /*
@@ -300,11 +312,11 @@ void tx_flush() {
     tx_frame(symbol, CYCLES);
 }
 
-void bpsk_modulate() {
+void bpsk_pilot_modulate() {
     tx_frame(pilot_table, PILOT_SYMBOLS);
 }
 
-void qpsk_modulate(int tx_bits[], int length) {
+void qpsk_data_modulate(int tx_bits[], int length) {
     complex float symbol[length];
     int dibit[2];
 
@@ -326,15 +338,12 @@ int main(int argc, char** argv) {
 
     srand(time(0));
 
-    tx_osc_offset = 0;
-    rx_osc_offset = 0;
-
     /*
      * Create an oscillator sample table for the
      * selected center frequency of 1200 Hz
      */
-    for (int i = 0; i < OSC_TABLE_SIZE; i++) {
-        osc_table[i] = cmplx(TAU * CENTER * ((float) i / FS));
+    for (int i = 0; i < OSC_FIXED_SIZE; i++) {
+        osc_table[i] = cmplx(TAU * CENTER * (float) i / FS);
     }
 
     /*
@@ -359,12 +368,13 @@ int main(int argc, char** argv) {
     /*
      * This simulates the transmitted packets
      */
+    
     for (int k = 0; k < 500; k++) {
         tx_frame_reset();
         tx_flush();
     
         // 33 BPSK pilots
-        bpsk_modulate();
+        bpsk_pilot_modulate();
         tx_flush();
 
         /*
@@ -373,11 +383,11 @@ int main(int argc, char** argv) {
         for (int j = 0; j < NS; j++) {
             // 31 QPSK
             for (int i = 0; i < (DATA_SYMBOLS * 2); i += 2) {
-                bits[i] = 0;//rand() % 2;
-                bits[i + 1] = 0;//rand() % 2;
+                bits[i] = rand() % 2;
+                bits[i + 1] = rand() % 2;
             }
             
-            qpsk_modulate(bits, DATA_SYMBOLS);
+            qpsk_data_modulate(bits, DATA_SYMBOLS);
         }
 
         fwrite(tx_samples, sizeof (int16_t), tx_sample_offset, fout);
@@ -391,6 +401,8 @@ int main(int argc, char** argv) {
      */
     fin = fopen(TX_FILENAME, "r");
 
+    rx_osc_offset = 0;
+    
     while (1) {
         size_t count = fread(frame, sizeof (int16_t), RX_SAMPLES_SIZE, fin);
 

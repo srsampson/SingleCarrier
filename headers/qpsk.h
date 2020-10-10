@@ -11,7 +11,6 @@ extern "C"
 #include <stdint.h>
 #include <math.h> 
 
-#define OSC_TABLE_SIZE  32
 #define NZEROS          41
 
 #define FS              8000.0f
@@ -20,6 +19,13 @@ extern "C"
 #define TS              (1.0f / RS)
 #define CYCLES          (int) (FS / RS)
 #define CENTER          1200.0f
+#define QUADRANTS       4
+    
+// Make it double size for grins (size = 40 for 1600 baud)
+#define OSC_TABLE_SIZE  (int)(((FS / RS) * QUADRANTS) * 2)
+
+// C doesn't like variable array sizes in globals
+#define OSC_FIXED_SIZE  (5 * 4 * 2)
 
 #define PILOT_SYMBOLS   33
 #define DATA_SYMBOLS    31
@@ -65,8 +71,8 @@ void qpsk_demod(complex float, int []);
 
 void flush_fir_memory(complex float *memory);
 
-void bpsk_modulate(void);
-void qpsk_modulate(int [], int);
+void bpsk_pilot_modulatTXe(void);
+void qpsk_data_modulate(int [], int);
 
 void tx_frame(complex float [], int);
 void tx_frame_reset(void);
