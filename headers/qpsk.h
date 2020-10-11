@@ -39,11 +39,11 @@ extern "C"
 #define RX_SAMPLES_SIZE 1500
 
 #ifndef M_PI
-#define M_PI        3.14159265358979323846f
+#define M_PI            3.14159265358979323846f
 #endif
 
-#define TAU         (2.0f * M_PI)
-#define ROTATE45       (M_PI / 4.0f)
+#define TAU             (2.0f * M_PI)
+#define ROTATE45        (M_PI / 4.0f)
 
 #define cmplx(value) (cosf(value) + sinf(value) * I)
 #define cmplxconj(value) (cosf(value) + sinf(value) * -I)
@@ -71,7 +71,7 @@ void qpsk_demod(complex float, int []);
 
 void flush_fir_memory(complex float *memory);
 
-void bpsk_pilot_modulatTXe(void);
+void bpsk_pilot_modulate(void);
 void qpsk_data_modulate(int [], int);
 
 void tx_frame(complex float [], int);
