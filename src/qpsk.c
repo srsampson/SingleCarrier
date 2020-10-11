@@ -399,7 +399,7 @@ int main(int argc, char** argv) {
     /*
      * Now try to process what was transmitted
      */
-    fin = fopen(TX_FILENAME, "r");
+    fin = fopen(TX_FILENAME, "rb");
 
     rx_osc_offset = 0;
     
