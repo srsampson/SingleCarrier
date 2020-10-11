@@ -22,7 +22,7 @@
 static float cnormf(complex float);
 static complex float fir(complex float *, complex float [], int);
 static complex float dft(complex float *);
-static void idft(complex float *, complex float);
+static void idft(complex float *, complex float *, int);
 static float correlate_pilots(complex float [], int);
 static float magnitude_pilots(complex float [], int);
 
@@ -41,6 +41,7 @@ static complex float process_frame[RX_SAMPLES_SIZE];    // Input Symbols * 2
 static complex float pilot_table[PILOT_SYMBOLS];
 static int16_t tx_samples[TX_SAMPLES_SIZE];
 static int tx_sample_offset;
+static float inv_cycles;
 
 /*
  * QPSK Quadrant bit-pair values - Gray Coded
@@ -79,17 +80,17 @@ const int8_t pilotvalues[] = {
  * A.J. Fisher Design
  */
 static const float rrccoeff[] = {
-    0.0020423298f, 0.0119232360f, 0.0133470732f, 0.0030905368f,
-    -0.0138171019f, -0.0254514870f, -0.0196589480f, 0.0071235033f,
-    0.0442307140f, 0.0689148706f, 0.0571180020f, -0.0013440359f,
-    -0.0909920934f, -0.1698743515f, -0.1827969854f, -0.0846912701f,
-    0.1357337643f, 0.4435364036f, 0.7637556509f, 1.0056258619f,
-    1.0956360553f, 1.0056258619f, 0.7637556509f, 0.4435364036f,
-    0.1357337643f, -0.0846912701f, -0.1827969854f, -0.1698743515f,
-    -0.0909920934f, -0.0013440359f, 0.0571180020f, 0.0689148706f,
-    0.0442307140f, 0.0071235033f, -0.0196589480f, -0.0254514870f,
-    -0.0138171019f, 0.0030905368f, 0.0133470732f, 0.0119232360f,
-    0.0020423298f
++0.0232940453, -0.0201202258, -0.0612790348, -0.0819379363,
+    -0.0698817641, -0.0250023072, +0.0387785530, +0.0970884688,
+    +0.1235018201, +0.1000860094, +0.0262756547, -0.0775463161,
+    -0.1737859595, -0.2182154794, -0.1743657855, -0.0270615201,
+    +0.2096612579, +0.4934135321, +0.7634412783, +0.9570270562,
+    +1.0273271784, +0.9570270562, +0.7634412783, +0.4934135321,
+    +0.2096612579, -0.0270615201, -0.1743657855, -0.2182154794,
+    -0.1737859595, -0.0775463161, +0.0262756547, +0.1000860094,
+    +0.1235018201, +0.0970884688, +0.0387785530, -0.0250023072,
+    -0.0698817641, -0.0819379363, -0.0612790348, -0.0201202258,
+    +0.0232940453
 };
 
 // Functions
@@ -123,13 +124,11 @@ static complex float fir(complex float *memory, complex float sample[], int inde
 /*
  * Convert frequency sample into cycles of time domain result
  */
-static void idft(complex float *result, complex float symbol) {
-    float inv_cycles = (1.0f / CYCLES);
-
-    result[0] = (symbol * inv_cycles);
+static void idft(complex float *result, complex float symbol[], int index) {
+    result[0] = (symbol[index] * inv_cycles);
 
     for (int row = 1; row < CYCLES; row++) {
-        result[row] = cmplx(DOC * row) * (symbol * inv_cycles);
+        result[row] = cmplx(DOC * row) * (symbol[index] * inv_cycles);
     }
 }
 
@@ -177,21 +176,29 @@ static float magnitude_pilots(complex float symbol[], int index) {
  * Receive function
  */
 void rx_frame(int16_t in[], int bits[]) {
-    complex float result[1];
-    int16_t real[1];
-    
+    complex float sample[1];
+
+    /*
+     * Filter at the 8 kHz rate
+     */
     for (int i = 0; i < RX_SAMPLES_SIZE; i++) {
+        sample[0] = ((float) in[i] / 16384.0f) + 0.0f * I;
+        
         input_frame[i] = input_frame[RX_SAMPLES_SIZE + i];
-        input_frame[RX_SAMPLES_SIZE + i] = ((float) in[i] / 16384.0f) + 0.0f * I;
+        input_frame[RX_SAMPLES_SIZE + i] = sample[0];//fir(rx_filter, sample, 0);
     }
-    
+
+    /*
+     * Downsample
+     */
     for (int i = 0, j = 0; i < RX_SAMPLES_SIZE; i += CYCLES, j++) {
         process_frame[j] = process_frame[(RX_SAMPLES_SIZE / CYCLES) + j];
-
-        result[0] = dft(&input_frame[i]);
-
-        process_frame[(RX_SAMPLES_SIZE / CYCLES) + j] = result[0];//fir(rx_filter, result, 0);
+        process_frame[(RX_SAMPLES_SIZE / CYCLES) + j] = dft(&input_frame[i]);
     }
+    
+    /*
+     * We are now dealing with 1600 symbol rate after DFT
+     */
 
     int dibit[2];
     
@@ -213,7 +220,7 @@ void rx_frame(int16_t in[], int bits[]) {
 
     mean = magnitude_pilots(process_frame, max_index);
 
-    if (mean > 30.0f) {
+    //if (mean > 30.0f) {
         printf("Max_index = %d Mean = %.2f\n", max_index, mean);
 
         for (int i = max_index; i < (max_index + PILOT_SYMBOLS); i++) {
@@ -226,7 +233,7 @@ void rx_frame(int16_t in[], int bits[]) {
         printf("\n\n");
         
         fflush(stdout);
-    }
+    //}
 }
 
 /*
@@ -268,19 +275,34 @@ void qpsk_demod(complex float symbol, int bits[]) {
     bits[1] = cimagf(rotate) < 0.0f;    // Q < 0 ?
 }
 
+/*
+ * The symbol rate is 1600 baud
+ */
 void tx_frame(complex float symbol[], int length) {
     complex float result[CYCLES];
-    complex float tval;
-    
-    for (int k = 0; k < length; k++) {
-        tval = symbol[k];
-        
-        idft(result, tval); //fir(tx_filter, symbol, k));
-        
+    complex float signal[CYCLES * length];
+
+    /*
+     * Here we go from the 1600 symbol rate by
+     * upsampling each symbol to the 8 kHz sample rate
+     */
+
+    for (int i = 0, k = 0; i < length; i++, k += CYCLES) {
+        idft(result, symbol, i);
+
         for (int j = 0; j < CYCLES; j++) {
-            tx_samples[tx_sample_offset] = (int16_t) (crealf(result[j]) * 16384.0f);
-            tx_sample_offset = (tx_sample_offset + 1) % TX_SAMPLES_SIZE;
+            signal[k+j] = result[j];
         }
+    }
+
+    /*
+     * Filter at the 8 kHz rate
+     */
+    for (int i = 0; i < (CYCLES * length); i++) {
+        complex float sym = signal[i];//fir(tx_filter, signal, i);
+        
+        tx_samples[tx_sample_offset] = (int16_t) (crealf(sym) * 32767.0f);
+        tx_sample_offset = (tx_sample_offset + 1) % TX_SAMPLES_SIZE;
     }
 }
 
@@ -344,6 +366,8 @@ int main(int argc, char** argv) {
         pilot_table[i] = ((float) pilotvalues[i] + 0.0f * I); // complex -1.0 or 1.0
     }
 
+    inv_cycles = (1.0f / CYCLES);
+    
     /*
      * create the BPSK/QPSK pilot time-domain waveform
      */
