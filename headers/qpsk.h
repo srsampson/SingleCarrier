@@ -19,14 +19,7 @@ extern "C"
 #define TS              (1.0f / RS)
 #define CYCLES          (int) (FS / RS)
 #define CENTER          1200.0f
-#define QUADRANTS       4
     
-// Make it double size for grins (size = 40 for 1600 baud)
-#define OSC_TABLE_SIZE  (int)(((FS / RS) * QUADRANTS) * 2)
-
-// C doesn't like variable array sizes in globals
-#define OSC_FIXED_SIZE  (5 * 4 * 2)
-
 #define PILOT_SYMBOLS   33
 #define DATA_SYMBOLS    31
     
@@ -44,7 +37,8 @@ extern "C"
 
 #define TAU             (2.0f * M_PI)
 #define ROTATE45        (M_PI / 4.0f)
-
+#define DOC             (TAU / (FS / RS))
+    
 #define cmplx(value) (cosf(value) + sinf(value) * I)
 #define cmplxconj(value) (cosf(value) + sinf(value) * -I)
 

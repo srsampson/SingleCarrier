@@ -1,4 +1,3 @@
-#define TEST2
 /*
  * qpsk.c
  *
@@ -22,12 +21,13 @@
 
 static float cnormf(complex float);
 static complex float fir(complex float *, complex float [], int);
+static complex float dft(complex float *);
+static void idft(complex float *, complex float);
 static float correlate_pilots(complex float [], int);
 static float magnitude_pilots(complex float [], int);
 
 // Defines
-#define TX_FILENAME "/tmp/spectrum-filtered.raw"
-#define RX_FILENAME "/tmp/spectrum.raw"
+#define TX_FILENAME "/tmp/spectrum.raw"
 
 // Globals
 
@@ -38,17 +38,9 @@ static complex float tx_filter[NZEROS];
 static complex float rx_filter[NZEROS];
 static complex float input_frame[RX_SAMPLES_SIZE * 2];  // Input Samples * 2
 static complex float process_frame[RX_SAMPLES_SIZE];    // Input Symbols * 2
-
 static complex float pilot_table[PILOT_SYMBOLS];
-
 static int16_t tx_samples[TX_SAMPLES_SIZE];
-
-static int tx_osc_offset;
-static int rx_osc_offset;
 static int tx_sample_offset;
-static int sync_position;
-
-static complex float osc_table[OSC_FIXED_SIZE];
 
 /*
  * QPSK Quadrant bit-pair values - Gray Coded
@@ -129,6 +121,36 @@ static complex float fir(complex float *memory, complex float sample[], int inde
 }
 
 /*
+ * Convert frequency sample into cycles of time domain result
+ */
+static void idft(complex float *result, complex float symbol) {
+    float inv_cycles = (1.0f / CYCLES);
+
+    result[0] = (symbol * inv_cycles);
+
+    for (int row = 1; row < CYCLES; row++) {
+        result[row] = cmplx(DOC * row) * (symbol * inv_cycles);
+    }
+}
+
+/*
+ * Convert time samples into frequency domain result
+ */
+static complex float dft(complex float *samples) {
+    complex float result = samples[0];
+
+    complex float c = cmplxconj(DOC);
+    complex float delta = c;
+
+    for (int row = 1; row < CYCLES; row++) {
+        result += (samples[row] * c);
+        c *= delta;
+    }
+    
+    return result;
+}
+
+/*
  * Sliding Window
  */
 static float correlate_pilots(complex float symbol[], int index) {
@@ -155,44 +177,24 @@ static float magnitude_pilots(complex float symbol[], int index) {
  * Receive function
  */
 void rx_frame(int16_t in[], int bits[]) {
+    complex float result[1];
+    int16_t real[1];
+    
     for (int i = 0; i < RX_SAMPLES_SIZE; i++) {
-        float val = (float) in[i] / 2048.0f;
-
         input_frame[i] = input_frame[RX_SAMPLES_SIZE + i];
-        input_frame[RX_SAMPLES_SIZE + i] = osc_table[rx_osc_offset] * val;
-        rx_osc_offset = (rx_osc_offset + 1) % OSC_FIXED_SIZE;
+        input_frame[RX_SAMPLES_SIZE + i] = ((float) in[i] / 16384.0f) + 0.0f * I;
     }
+    
+    for (int i = 0, j = 0; i < RX_SAMPLES_SIZE; i += CYCLES, j++) {
+        process_frame[j] = process_frame[(RX_SAMPLES_SIZE / CYCLES) + j];
 
-    // Downsample the 5 cycles at 8 kHz Sample rate to symbols (1600 Baud)
-    // There will be two frames of symbols in order to slide the window
-    // past the first half during processing.
+        result[0] = dft(&input_frame[i]);
 
-    for (int i = 0; i < (RX_SAMPLES_SIZE / CYCLES); i++) {
-        process_frame[i] = process_frame[(RX_SAMPLES_SIZE / CYCLES) + i];
-        process_frame[(RX_SAMPLES_SIZE / CYCLES) + i] = fir(rx_filter, input_frame, (i * CYCLES));
+        process_frame[(RX_SAMPLES_SIZE / CYCLES) + j] = result[0];//fir(rx_filter, result, 0);
     }
 
     int dibit[2];
-
-#ifdef TEST1
-    // So far this test shows crap
     
-    // Since the QPSK are all 00 then all we should see is
-    // 11 for -1 and 00 for +1 but I'm seeing some 01 and 10 values.
-    //
-    // I'm not seeing the pilots at all
-    
-    for (int i = 0; i < (RX_SAMPLES_SIZE / CYCLES); i++) {
-        complex float symbol = process_frame[i];
-        qpsk_demod(symbol, dibit);
-        
-        printf("%d%d ", dibit[1], dibit[0]);
-    }
-    
-    printf("\n\n");
-#endif
-    
-#ifdef TEST2
     /* Hunting for the pilot preamble sequence */
 
     float temp_value = 0.0f;
@@ -208,21 +210,23 @@ void rx_frame(int16_t in[], int bits[]) {
             max_index = i;
         }
     }
-    
+
     mean = magnitude_pilots(process_frame, max_index);
-    sync_position = max_index + PILOT_SYMBOLS;
-    
-    printf("%d %.2f\n", max_index, mean);
-    
-    for (int i = sync_position; i < (PILOT_SYMBOLS + sync_position); i++) {
-        complex float symbol = process_frame[i];
-        qpsk_demod(symbol, dibit);
+
+    if (mean > 30.0f) {
+        printf("Max_index = %d Mean = %.2f\n", max_index, mean);
+
+        for (int i = max_index; i < (max_index + PILOT_SYMBOLS); i++) {
+            complex float symbol = process_frame[i];
+            qpsk_demod(symbol, dibit);
+
+            printf("%d%d ", dibit[1], dibit[0]);
+        }
+
+        printf("\n\n");
         
-        printf("%d%d ", dibit[1], dibit[0]);
+        fflush(stdout);
     }
-    
-    printf("\n\n");
-#endif
 }
 
 /*
@@ -264,22 +268,17 @@ void qpsk_demod(complex float symbol, int bits[]) {
     bits[1] = cimagf(rotate) < 0.0f;    // Q < 0 ?
 }
 
-/*
- * Encode the symbol while upsampling to 8 kHz sample rate
- * using the root raised cosine filter, and a center frequency
- * of 1200 Hz to center the audio in the 300 to 3 kHz limits
- */
 void tx_frame(complex float symbol[], int length) {
+    complex float result[CYCLES];
+    complex float tval;
+    
     for (int k = 0; k < length; k++) {
-        /*
-         * At the 8 kHz sample rate, we will need to
-         * upsample 5 cycles of the symbol for 1600 baud
-         */
+        tval = symbol[k];
+        
+        idft(result, tval); //fir(tx_filter, symbol, k));
+        
         for (int j = 0; j < CYCLES; j++) {
-            complex float y = osc_table[tx_osc_offset] * fir(tx_filter, symbol, k);
-            tx_osc_offset = (tx_osc_offset + 1) % OSC_FIXED_SIZE;
-
-            tx_samples[tx_sample_offset] = (int16_t) (crealf(y) * 2048.0f);
+            tx_samples[tx_sample_offset] = (int16_t) (crealf(result[j]) * 16384.0f);
             tx_sample_offset = (tx_sample_offset + 1) % TX_SAMPLES_SIZE;
         }
     }
@@ -296,7 +295,6 @@ void flush_fir_memory(complex float *memory) {
 
 void tx_frame_reset() {
     tx_sample_offset = 0;
-    tx_osc_offset = 0;
 }
 
 /*
@@ -337,14 +335,6 @@ int main(int argc, char** argv) {
     int16_t frame[RX_SAMPLES_SIZE];
 
     srand(time(0));
-
-    /*
-     * Create an oscillator sample table for the
-     * selected center frequency of 1200 Hz
-     */
-    for (int i = 0; i < OSC_FIXED_SIZE; i++) {
-        osc_table[i] = cmplx(TAU * CENTER * (float) i / FS);
-    }
 
     /*
      * Create a complex float table of pilot values
@@ -400,9 +390,13 @@ int main(int argc, char** argv) {
      * Now try to process what was transmitted
      */
     fin = fopen(TX_FILENAME, "rb");
-
-    rx_osc_offset = 0;
     
+    /*
+     * Initialize the tx FIR filter memory for
+     * this transmission of packets
+     */
+    flush_fir_memory(rx_filter);
+
     while (1) {
         size_t count = fread(frame, sizeof (int16_t), RX_SAMPLES_SIZE, fin);
 
