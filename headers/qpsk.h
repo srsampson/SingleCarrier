@@ -11,7 +11,7 @@ extern "C"
 #include <stdint.h>
 #include <math.h> 
 
-#define NZEROS          41
+#define NTAPS           39
 
 #define FS              8000.0f
 #define RS              1600.0f
@@ -19,7 +19,7 @@ extern "C"
 #define TS              (1.0f / RS)
 #define CYCLES          (int) (FS / RS)
 #define CENTER          1200.0f
-    
+
 #define PILOT_SYMBOLS   33
 #define DATA_SYMBOLS    31
     
@@ -37,8 +37,7 @@ extern "C"
 
 #define TAU             (2.0f * M_PI)
 #define ROTATE45        (M_PI / 4.0f)
-#define DOC             (TAU / (FS / RS))
-    
+
 #define cmplx(value) (cosf(value) + sinf(value) * I)
 #define cmplxconj(value) (cosf(value) + sinf(value) * -I)
 
@@ -72,7 +71,7 @@ void tx_frame(complex float [], int);
 void tx_frame_reset(void);
 void tx_flush(void);
 
-void rx_frame(int16_t [], int []);
+void rx_frame(int16_t [], int [], FILE *);
 
 #ifdef __cplusplus
 }
