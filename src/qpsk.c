@@ -232,7 +232,6 @@ void rx_frame(int16_t in[], int bits[], FILE *fout) {
      */
     for (int i = 0; i < (RX_SAMPLES_SIZE / CYCLES); i++) {
         process_frame[i] = process_frame[(RX_SAMPLES_SIZE / CYCLES) + i];
-        //process_frame[(RX_SAMPLES_SIZE / CYCLES) + i] = fir(rx_filter, input_frame, (i * CYCLES)) * fbb_phase[0];
         process_frame[(RX_SAMPLES_SIZE / CYCLES) + i] = input_frame[(i * CYCLES)];
         
         // testing
@@ -329,6 +328,7 @@ void qpsk_demod(complex float symbol, int bits[]) {
     bits[0] = crealf(rotate) < 0.0f;    // I < 0 ?
     bits[1] = cimagf(rotate) < 0.0f;    // Q < 0 ?
 }
+
 /*
  * Encode the symbol while upsampling to 8 kHz sample rate
  * using the root raised cosine filter, and a center frequency
