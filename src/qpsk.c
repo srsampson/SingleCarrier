@@ -175,7 +175,7 @@ static void freq_shift(complex float out[], complex float in[], int index,
  * Receive function
  * 
  * Basically we receive a 1600 baud QPSK signal where each symbol
- * is made up of 5 cycles which results in (1600 * 5) 4800 samples/sec.
+ * is made up of 5 cycles which results in (1600 * 5) 8000 samples/sec.
  * 
  * The signal has an I and a Q channel, so we receive PCM as stereo.
  * 
