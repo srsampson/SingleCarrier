@@ -7,4 +7,7 @@ The design is driven by the FreeDV 2020 Specifications which were originally des
 1600 Baud QPSK or 2-bits per symbol is 3000 bit/sec. The pilots use BPSK for both coherency and in this modem can also be used for syncronization. One (1) frame of BPSK pilots/sync, and eight (8) frames of QPSK data.
 
 #### Development
-Currently working on the low level code.
+Currently working on the low level code. The modulation/demodulation seems to work, but I have to transmit I+Q.
+The FIR filter refuses to work. It used to work, but I'm obviously doing something wrong.
+
+I don't really like the design, as it is overly complex. However, with no FIR it does decode the pilots.
