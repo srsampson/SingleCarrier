@@ -25,7 +25,7 @@ extern "C"
     
 #define PILOT_SAMPLES   (PILOT_SYMBOLS * CYCLES)
 #define DATA_SAMPLES    (DATA_SYMBOLS * CYCLES * NS)
-#define FRAME_SIZE      2810
+#define FRAME_SIZE      1405
 
 #ifndef M_PI
 #define M_PI            3.14159265358979323846f
