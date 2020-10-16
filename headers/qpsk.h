@@ -11,7 +11,7 @@ extern "C"
 #include <stdint.h>
 #include <math.h> 
 
-#define NTAPS           39
+#define NTAPS           49
 
 #define FS              8000.0f
 #define RS              1600.0f
@@ -25,11 +25,7 @@ extern "C"
     
 #define PILOT_SAMPLES   (PILOT_SYMBOLS * CYCLES)
 #define DATA_SAMPLES    (DATA_SYMBOLS * CYCLES * NS)
-#define FRAME_SIZE      (PILOT_SAMPLES + DATA_SAMPLES)
-
-// @ (33 * 5) + ((31 * 5) * 8)
-#define TX_SAMPLES_SIZE 1500
-#define RX_SAMPLES_SIZE 1500
+#define FRAME_SIZE      2810
 
 #ifndef M_PI
 #define M_PI            3.14159265358979323846f
@@ -62,14 +58,10 @@ typedef enum
 complex float qpsk_mod(int []);
 void qpsk_demod(complex float, int []);
 
-void flush_fir_memory(complex float *memory);
+int bpsk_pilot_modulate(int16_t []);
+int qpsk_data_modulate(int16_t [], int [], int);
 
-void bpsk_pilot_modulate(void);
-void qpsk_data_modulate(int [], int);
-
-void tx_frame(complex float [], int);
-void tx_frame_reset(void);
-void tx_flush(void);
+int tx_frame(int16_t [], complex float [], int);
 
 void rx_frame(int16_t [], int [], FILE *);
 
