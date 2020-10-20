@@ -22,7 +22,7 @@
 // Prototypes
 
 static float cnormf(complex float);
-static void freq_shift(complex float [], complex float [], int, int, float, complex float []);
+static void freq_shift(complex float [], complex float [], int, int, float, complex float);
 static void fir(complex float [], complex float [], int);
 static float correlate_pilots(complex float [], int);
 static float magnitude_pilots(complex float [], int);
@@ -36,11 +36,8 @@ static float magnitude_pilots(complex float [], int);
 static FILE *fin;
 static FILE *fout;
 
-static complex float tx_filter[NTAPS];
-static complex float rx_filter[NTAPS];
 static complex float input_frame[(FRAME_SIZE * 2)];
-//static complex float decimated_frame[(FRAME_SIZE / CYCLES) * 2];
-static complex float decimated_frame[564]; // get rid of scope warning
+static complex float decimated_frame[(FRAME_SIZE / CYCLES) * 2]; /* file scope warning in GNU */
 static complex float pilot_table[PILOT_SYMBOLS];
 
 static int sync_position;
@@ -48,11 +45,11 @@ static int sync_position;
 // Two phase for full duplex
 // Scripted to avoid pointers
 
-static complex float fbb_tx_phase[1];
-static complex float fbb_tx_rect[1];
+static complex float fbb_tx_phase;
+static complex float fbb_tx_rect;
 
-static complex float fbb_rx_phase[1];
-static complex float fbb_rx_rect[1];
+static complex float fbb_rx_phase;
+static complex float fbb_rx_rect;
 /*
  * QPSK Quadrant bit-pair values - Gray Coded
  * Non-static so they can be used by other modules
@@ -80,14 +77,14 @@ const int8_t pilotvalues[] = {
  * hs = gen_rn_coeffs(.31, 1.0/8000.0, 1600, 10, 5);
  */
 static const float alpha31_root[] = {
-  -0.00140721, -0.00258347, -0.00211782, -0.00010823,  0.00224934,  0.00326078,
-   0.00179380, -0.00179940, -0.00552621, -0.00663829, -0.00324267,  0.00418549,  0.01233564,
-   0.01618214,  0.01144857, -0.00262892, -0.02165701, -0.03666715, -0.03709688, -0.01518676,
-   0.03002121,  0.09095027,  0.15306638,  0.19943502,  0.21659606,  0.19943502,  0.15306638,
-   0.09095027,  0.03002121, -0.01518676, -0.03709688, -0.03666715, -0.02165701, -0.00262892,
-   0.01144857,  0.01618214,  0.01233564,  0.00418549, -0.00324267, -0.00663829, -0.00552621,
-  -0.00179940,  0.00179380,  0.00326078,  0.00224934, -0.00010823, -0.00211782, -0.00258347,
-  -0.00140721
+  -0.00140721f, -0.00258347f, -0.00211782f, -0.00010823f,  0.00224934f,  0.00326078f,
+   0.00179380f, -0.00179940f, -0.00552621f, -0.00663829f, -0.00324267f,  0.00418549f,  0.01233564f,
+   0.01618214f,  0.01144857f, -0.00262892f, -0.02165701f, -0.03666715f, -0.03709688f, -0.01518676f,
+   0.03002121f,  0.09095027f,  0.15306638f,  0.19943502f,  0.21659606f,  0.19943502f,  0.15306638f,
+   0.09095027f,  0.03002121f, -0.01518676f, -0.03709688f, -0.03666715f, -0.02165701f, -0.00262892f,
+   0.01144857f,  0.01618214f,  0.01233564f,  0.00418549f, -0.00324267f, -0.00663829f, -0.00552621f,
+  -0.00179940f,  0.00179380f,  0.00326078f,  0.00224934f, -0.00010823f, -0.00211782f, -0.00258347f,
+  -0.00140721f
 };
 
 // Functions
@@ -147,7 +144,7 @@ static float magnitude_pilots(complex float symbol[], int index) {
  * Useful for operator receiver fine tuning
  */
 static void freq_shift(complex float out[], complex float in[], int index,
-        int length, float fshift, complex float phase_rect[]) {
+        int length, float fshift, complex float phase_rect) {
     
     complex float foffset_rect = cmplx(TAU * fshift / FS);
     
@@ -162,13 +159,13 @@ static void freq_shift(complex float out[], complex float in[], int index,
     }
 
     for (int i = 0; i < length; i++) {
-	phase_rect[0] *= foffset_rect;
-	out[i] = copy[i] * phase_rect[0];
+	phase_rect *= foffset_rect;
+	out[i] = copy[i] * phase_rect;
     }
 
     free(copy);
 
-    phase_rect[0] /= cabsf(phase_rect[0]);    // normalize as magnitude can drift
+    phase_rect /= cabsf(phase_rect);    // normalize as magnitude can drift
 }
 
 /*
@@ -194,7 +191,7 @@ void rx_frame(int16_t in[], int bits[], FILE *fout) {
      * Shift the 1200 Hz Center Frequency to Baseband
      */
     for (int i = 0, j = 0; j < FRAME_SIZE; i += 2, j++) {
-        fbb_rx_phase[0] *= fbb_rx_rect[0];
+        fbb_rx_phase *= fbb_rx_rect;
 
 #ifdef TEST_OUT_1
         /*
@@ -209,10 +206,10 @@ void rx_frame(int16_t in[], int bits[], FILE *fout) {
         complex float temp = (valI + valQ * I);
 
         input_frame[j] = input_frame[FRAME_SIZE + j];
-        input_frame[FRAME_SIZE + j] = (temp * fbb_rx_phase[0]);
+        input_frame[FRAME_SIZE + j] = (temp * fbb_rx_phase);
     }
 
-    fbb_rx_phase[0] /= cabsf(fbb_rx_phase[0]);    // normalize as magnitude can drift
+    fbb_rx_phase /= cabsf(fbb_rx_phase);    // normalize as magnitude can drift
 
 #ifdef TEST_OUT_1
     /* Unshifted 1200 Hz audio */
@@ -303,7 +300,7 @@ void rx_frame(int16_t in[], int bits[], FILE *fout) {
     printf("%d %.2f\n", sync_position, mean);
     
     for (int i = sync_position; i < (PILOT_SYMBOLS + sync_position); i++) {
-        float symbol = decimated_frame[i];
+        complex float symbol = decimated_frame[i];
         qpsk_demod(symbol, dibit);
         
         printf("%d%d ", dibit[1], dibit[0]);
@@ -381,11 +378,11 @@ int tx_frame(int16_t samples[], complex float symbol[], int length) {
      * Shift Baseband to 1200 Hz Center Frequency
      */
     for (int i = 0; i < (length * CYCLES); i++) {
-        fbb_tx_phase[0] *= fbb_tx_rect[0];
-        signal[i] *= fbb_tx_phase[0];
+        fbb_tx_phase *= fbb_tx_rect;
+        signal[i] *= fbb_tx_phase;
     }
     
-    fbb_tx_phase[0] /= cabsf(fbb_tx_phase[0]); // normalize as magnitude can drift
+    fbb_tx_phase /= cabsf(fbb_tx_phase); // normalize as magnitude can drift
 
     /*
      * Now return the 2810 I+Q samples
@@ -422,7 +419,7 @@ int qpsk_data_modulate(int16_t samples[], int tx_bits[], int length) {
 
 int main(int argc, char** argv) {
     int bits[6400];
-    int16_t frame[FRAME_SIZE];
+    int16_t frame[FRAME_SIZE * 2];
     int length;
     
     srand(time(0));
@@ -444,8 +441,8 @@ int main(int argc, char** argv) {
      * This simulates the transmitted packets
      */
     
-    fbb_tx_phase[0] = cmplx(0.0f);
-    fbb_tx_rect[0] = cmplx(TAU * CENTER / FS);
+    fbb_tx_phase = cmplx(0.0f);
+    fbb_tx_rect = cmplx(TAU * CENTER / FS);
     
     for (int k = 0; k < 500; k++) {
         // 33 BPSK pilots
@@ -478,8 +475,8 @@ int main(int argc, char** argv) {
     fin = fopen(TX_FILENAME, "rb");
     fout = fopen(RX_FILENAME, "wb");
 
-    fbb_rx_phase[0] = cmplx(0.0f);
-    fbb_rx_rect[0] = cmplx(TAU * -CENTER / FS);
+    fbb_rx_phase = cmplx(0.0f);
+    fbb_rx_rect = cmplx(TAU * -CENTER / FS);
 
     while (1) {
         /*
@@ -499,3 +496,4 @@ int main(int argc, char** argv) {
 
     return (EXIT_SUCCESS);
 }
+

@@ -11,3 +11,9 @@ Currently working on the low level code. The modulation/demodulation seems to wo
 The FIR filter refuses to work. It used to work, but I'm obviously doing something wrong.
 
 I don't really like the design, as it is overly complex. However, with no FIR it does decode the pilots.
+
+#### Building
+To build the project, unzip the ```export-qpsk.zip``` file into an empty directory, ```cd qpsk``` into it, and type ```Make``` and it will build the project, leaving the compiled file in ```dist/Debug/GNU-Linux/``` directory.
+
+This is based on its Netbeans 8.2 IDE I use for building.
+
