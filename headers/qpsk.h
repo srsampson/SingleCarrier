@@ -12,6 +12,7 @@ extern "C"
 #include <math.h> 
 
 #define NTAPS           49
+#define FRATE           5
 
 #define FS              8000.0f
 #define RS              1600.0f
@@ -68,4 +69,3 @@ void rx_frame(int16_t [], int [], FILE *);
 #ifdef __cplusplus
 }
 #endif
-
