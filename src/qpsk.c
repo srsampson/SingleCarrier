@@ -64,8 +64,7 @@ const complex float constellation[] = {
 };
 
 /*
- * These pilots are compatible with Octave version
- * Non-static so they can be used by other modules
+ * These pilots were randomly generated
  */
 const int8_t pilotvalues[] = {
     -1, -1, 1, 1, -1, -1, -1, 1,
@@ -181,12 +180,12 @@ void rx_frame(int16_t in[], int bits[], FILE *fout) {
     fbb_rx_phase /= cabsf(fbb_rx_phase);    // normalize as magnitude can drift
     
 #ifdef TEST_OUT
-    /* Shifted to baseband */
+    /* Display baseband */
     
     for (int i = 0, j = 0; j < FRAME_SIZE; i += 2, j++) {
         
         /*
-         * Output the original frame in stereo at 8000 samples/sec
+         * Output the frame in stereo at 8000 samples/sec
          */
         pcm[i] = (int16_t)(crealf(bpfilt[j]) * 16384.0f);
         pcm[i + 1] = (int16_t)(cimagf(bpfilt[j]) * 16384.0f);
@@ -253,8 +252,6 @@ void rx_frame(int16_t in[], int bits[], FILE *fout) {
     
     printf("\n\n");
 #endif
-    
-    fflush(stdout);
 }
 
 /*
@@ -297,9 +294,9 @@ void qpsk_demod(complex float symbol, int bits[]) {
 }
 
 /*
- * Encode the symbol while upsampling to 8 kHz sample rate
- * using the root raised cosine filter, and a center frequency
- * of 1200 Hz to center the audio in the 300 to 3 kHz limits
+ * Modulate the symbols by first upsampling to 8 kHz sample rate,
+ * and translating the spectrum to 1200 Hz, where it is complex filtered
+ * using the root raised cosine coefficients.
  */
 int tx_frame(int16_t samples[], complex float symbol[], int length) {
     complex float signal[(length * CYCLES)];
@@ -307,7 +304,6 @@ int tx_frame(int16_t samples[], complex float symbol[], int length) {
 
     /*
      * Build the 1600 baud packet Frame
-     * into 1405 samples
      */
     for (int i = 0; i < length; i++) {
         for (int j = 0; j < CYCLES; j++) {
@@ -332,7 +328,7 @@ int tx_frame(int16_t samples[], complex float symbol[], int length) {
     memmove(signal, bpfilt, (length * CYCLES) * sizeof (complex float));
 
     /*
-     * Now return the I+Q samples
+     * Now return the resulting I+Q samples
      */
     for (int i = 0, j = 0; j < (length * CYCLES); i += 2, j++) {
         complex float temp = signal[j];
@@ -370,6 +366,10 @@ int main(int argc, char** argv) {
     int length;
 
     srand(time(0));
+    
+    /* Turn off output text stream buffering */
+
+    setvbuf(stdout, NULL, _IONBF, BUFSIZ);
 
     /*
      * Create a complex float table of pilot values
@@ -393,6 +393,10 @@ int main(int argc, char** argv) {
      * create the BPSK/QPSK pilot time-domain waveform
      */
     fout = fopen(TX_FILENAME, "wb");
+
+    /* Turn off PCM stream buffering */
+
+    setvbuf(fout, NULL, _IONBF, BUFSIZ);
 
     /*
      * This simulates the transmitted packets
@@ -423,7 +427,6 @@ int main(int argc, char** argv) {
         }
     }
 
-    fflush(fout);
     fclose(fout);
 
     /*
@@ -431,6 +434,11 @@ int main(int argc, char** argv) {
      */
     fin = fopen(TX_FILENAME, "rb");
     fout = fopen(RX_FILENAME, "wb");
+
+    /* Turn off PCM stream buffering */
+
+    setvbuf(fin, NULL, _IONBF, BUFSIZ);
+    setvbuf(fout, NULL, _IONBF, BUFSIZ);
 
     fbb_rx_phase = cmplx(0.0f);
     fbb_rx_rect = cmplx(TAU * -CENTER / FS);
@@ -448,7 +456,6 @@ int main(int argc, char** argv) {
     }
 
     fclose(fin);
-    fflush(fout);
     fclose(fout);
 
     quisk_filt_destroy(cbpf);

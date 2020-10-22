@@ -24,10 +24,12 @@
 #include "filter_coef.h"
 #include "qpsk.h"
 
+// This is faster than cexp()
 #define cmplx(value) (cosf(value) + sinf(value) * I)
 
 /*
- * This is a library of filter functions. They were copied from Quisk and converted to single precision.
+ * This is a library of filter functions.
+ * They were copied from Quisk and converted to single precision.
  */
 
 /*---------------------------------------------------------------------------*\
@@ -46,7 +48,7 @@ void quisk_filt_cfInit(struct quisk_cfFilter * filter, float * coefs, int taps) 
     // be real or complex.
     filter->dCoefs = coefs;
     filter->cpxCoefs = NULL;
-    filter->cSamples = (complex float *)malloc(taps * sizeof(complex float));
+    filter->cSamples = (complex float *) malloc(taps * sizeof(complex float));
     memset(filter->cSamples, 0, taps * sizeof(complex float));
     filter->ptcSamp = filter->cSamples;
     filter->nTaps = taps;
@@ -115,18 +117,17 @@ void quisk_cfTune(struct quisk_cfFilter * filter, float freq) {
 \*---------------------------------------------------------------------------*/
 
 void quisk_ccfFilter(complex float * inSamples, complex float * outSamples, int count, struct quisk_cfFilter * filter) {
-    int i, k;
-    complex float * ptSample;
-    complex float * ptCoef;
+    complex float *ptSample;
+    complex float *ptCoef;
     complex float accum;
 
-    for (i = 0; i < count; i++) {
+    for (int i = 0; i < count; i++) {
         *filter->ptcSamp = inSamples[i];
         accum = 0;
         ptSample = filter->ptcSamp;
         ptCoef = filter->cpxCoefs;
 
-        for (k = 0; k < filter->nTaps; k++, ptCoef++) {
+        for (int k = 0; k < filter->nTaps; k++, ptCoef++) {
             accum += *ptSample  *  *ptCoef;
 
             if (--ptSample < filter->cSamples)
