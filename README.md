@@ -9,7 +9,14 @@ The design is driven by the FreeDV 2020 Specifications which were originally des
 #### Development
 Currently working on the low level code. The modulation/demodulation seems to work, but I have to transmit and receive I+Q. I'm using the Quisk complex filter for the matched raised cosine coefficients. It appears to be working.
 
-#### Building
+#### Building from git clone & scatter diagram tests
+
+```
+$ make test_scatter
+```
+Then view `scatter.png`
+
+#### Building from export-qpsk.zip
 To build the project, unzip the ```export-qpsk.zip``` file into an empty directory, ```cd qpsk``` into it, and type ```Make``` and it will build the project, leaving the compiled file in ```dist/Debug/GNU-Linux/``` directory.
 
 This is based on its Netbeans 8.2 IDE I use for building.

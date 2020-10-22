@@ -200,6 +200,9 @@ void rx_frame(int16_t in[], int bits[], FILE *fout) {
     for (int i = 0; i < (FRAME_SIZE / CYCLES); i++) {
         decimated_frame[i] = decimated_frame[(FRAME_SIZE / CYCLES) + i];
         decimated_frame[(FRAME_SIZE / CYCLES) + i] = bpfilt[(i * CYCLES)];
+#ifdef TEST_SCATTER
+        fprintf(stderr,"%f %f\n", crealf(decimated_frame[(FRAME_SIZE / CYCLES) + i]), cimagf(decimated_frame[(FRAME_SIZE / CYCLES) + i]));
+#endif        
     }
 
     int dibit[2];
