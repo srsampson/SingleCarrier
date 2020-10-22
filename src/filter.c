@@ -89,16 +89,13 @@ void quisk_filt_destroy(struct quisk_cfFilter * filter) {
 \*---------------------------------------------------------------------------*/
 
 void quisk_cfTune(struct quisk_cfFilter * filter, float freq) {
-    float D, tune;
-    int i;
-
     if ( ! filter->cpxCoefs)
-        filter->cpxCoefs = (complex float *)malloc(filter->nTaps * sizeof(complex float));
+        filter->cpxCoefs = (complex float *) malloc(filter->nTaps * sizeof(complex float));
 
-    tune = TAU * freq;
-    D = (filter->nTaps - 1.0) / 2.0;
+    float tune = TAU * freq / FS;
+    float D = (filter->nTaps - 1.0) / 2.0;
 
-    for (i = 0; i < filter->nTaps; i++) {
+    for (int i = 0; i < filter->nTaps; i++) {
         float tval = tune * (i - D);
         filter->cpxCoefs[i] = cmplx(tval) * filter->dCoefs[i];
     }

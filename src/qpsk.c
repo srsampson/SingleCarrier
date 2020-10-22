@@ -1,5 +1,5 @@
+#define TEST_OUT
 #define TEST2
-#define TEST_OUT_1
 /*
  * qpsk.c
  *
@@ -153,42 +153,34 @@ void rx_frame(int16_t in[], int bits[], FILE *fout) {
     int16_t pcm[FRAME_SIZE * 2];
 
     /*
-     * Convert to I and Q complex samples
-     * 
-     * Shift the 1200 Hz Center Frequency to Baseband
+     * Convert input stereo PCM to I and Q complex samples
      */
     for (int i = 0, j = 0; j < FRAME_SIZE; i += 2, j++) {
-        fbb_rx_phase *= fbb_rx_rect;
-
-#ifdef TEST_OUT_1
-        /*
-         * Output the original frame in Stereo at 8000 samples/sec
-         */
-        pcm[i] = in[i];
-        pcm[i + 1] = in[i + 1];
-#endif
-
         float valI = ((float) in[i] / 16384.0f); // convert back to +/- .5
         float valQ = ((float) in[i + 1] / 16384.0f);
         complex float temp = (valI + valQ * I);
 
         input_frame[j] = input_frame[FRAME_SIZE + j];
-        input_frame[FRAME_SIZE + j] = (temp * fbb_rx_phase);
+        input_frame[FRAME_SIZE + j] = temp;
     }
-
-    fbb_rx_phase /= cabsf(fbb_rx_phase);    // normalize as magnitude can drift
 
     /*
      * Complex Root Cosine Filter
      */
     quisk_ccfFilter(input_frame, bpfilt, FRAME_SIZE, cbpf);
 
-#ifdef TEST_OUT_1
-    /* Unshifted 1200 Hz audio */
+    /*
+     * Translate to baseband
+     */
+    for (int i = 0; i < FRAME_SIZE; i++) {
+        fbb_rx_phase *= fbb_rx_rect;
+
+        bpfilt[i] *= fbb_rx_phase;
+    }
+
+    fbb_rx_phase /= cabsf(fbb_rx_phase);    // normalize as magnitude can drift
     
-    fwrite(pcm, sizeof (int16_t), (FRAME_SIZE * 2), fout);
-#endif
-#ifdef TEST_OUT_2
+#ifdef TEST_OUT
     /* Shifted to baseband */
     
     for (int i = 0, j = 0; j < FRAME_SIZE; i += 2, j++) {
@@ -211,19 +203,6 @@ void rx_frame(int16_t in[], int bits[], FILE *fout) {
         decimated_frame[(FRAME_SIZE / CYCLES) + i] = bpfilt[(i * CYCLES)];
     }
 
-#ifdef TEST_OUT_3
-    /*
-     * Output only real 1600 samples/sec
-     */
-
-    for (int i = 0; i < (FRAME_SIZE / CYCLES); i++) {
-        // testing
-        pcm[i] = (int16_t) (crealf(decimated_frame[i]) * 16384.0f);
-    }  
-    
-    fwrite(pcm, sizeof (int16_t), (FRAME_SIZE / CYCLES), fout);
-#endif
-  
     int dibit[2];
 
 #ifdef TEST1
@@ -337,13 +316,6 @@ int tx_frame(int16_t samples[], complex float symbol[], int length) {
     }
 
     /*
-     * Complex Root Cosine Filter
-     */
-
-    quisk_ccfFilter(signal, bpfilt, (length * CYCLES), cbpf);
-    memmove(signal, bpfilt, (length * CYCLES) * sizeof (complex float));
-
-    /*
      * Shift Baseband to 1200 Hz Center Frequency
      */
     for (int i = 0; i < (length * CYCLES); i++) {
@@ -352,6 +324,12 @@ int tx_frame(int16_t samples[], complex float symbol[], int length) {
     }
     
     fbb_tx_phase /= cabsf(fbb_tx_phase); // normalize as magnitude can drift
+
+    /*
+     * Complex Root Cosine Filter
+     */
+    quisk_ccfFilter(signal, bpfilt, (length * CYCLES), cbpf);
+    memmove(signal, bpfilt, (length * CYCLES) * sizeof (complex float));
 
     /*
      * Now return the I+Q samples
@@ -403,10 +381,13 @@ int main(int argc, char** argv) {
 
     cbpf = malloc(sizeof(struct quisk_cfFilter));
 
-    /* cbpf = complex coefficients, center frequency */
+    /* cbpf = complex band-pass filter */
 
     quisk_filt_cfInit(cbpf, alpha31_root, sizeof (alpha31_root) / sizeof (float));
-    quisk_cfTune(cbpf, CENTER / FS);
+    
+    /* Set the filter center frequency */
+
+    quisk_cfTune(cbpf, CENTER);
 
     /*
      * create the BPSK/QPSK pilot time-domain waveform
@@ -452,7 +433,7 @@ int main(int argc, char** argv) {
     fout = fopen(RX_FILENAME, "wb");
 
     fbb_rx_phase = cmplx(0.0f);
-    fbb_rx_rect = cmplx(TAU * CENTER / FS);
+    fbb_rx_rect = cmplx(TAU * -CENTER / FS);
 
     while (1) {
         /*
