@@ -1,7 +1,7 @@
 # Makefile for single carrier QPSK modem
 
-SRC=src/qpsk.c src/filter.c
-HEADER=headers/filter_coef.h  headers/filter.h  headers/qpsk.h
+SRC=src/qpsk.c
+HEADER=headers/filter_coef.h headers/qpsk.h
 
 qpsk: ${SRC} ${HEADER}
 	gcc -Iheaders ${SRC} -DTEST_SCATTER -o qpsk -Wall -lm

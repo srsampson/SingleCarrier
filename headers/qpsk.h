@@ -11,7 +11,7 @@ extern "C"
 #include <stdint.h>
 #include <math.h> 
 
-#define NTAPS           49
+#define NTAPS           50
 #define FRATE           5
 
 #define FS              8000.0f

@@ -18,12 +18,13 @@
 #include <time.h>
 
 #include "qpsk.h"
-#include "filter.h"
+#include "filter_coef.h"
 
 // Prototypes
 
 static float cnormf(complex float);
 static void freq_shift(complex float [], complex float [], int, int, float, complex float);
+static void fir(complex float [], complex float [], int);
 static float correlate_pilots(complex float [], int);
 static float magnitude_pilots(complex float [], int);
 
@@ -36,6 +37,8 @@ static float magnitude_pilots(complex float [], int);
 static FILE *fin;
 static FILE *fout;
 
+static complex float tx_filter[NTAPS];
+static complex float rx_filter[NTAPS];
 static complex float input_frame[(FRAME_SIZE * 2)];
 static complex float decimated_frame[564]; /* file scope warning in GNU using var */
 static complex float pilot_table[PILOT_SYMBOLS];
@@ -49,8 +52,6 @@ static complex float fbb_tx_rect;
 
 static complex float fbb_rx_phase;
 static complex float fbb_rx_rect;
-
-static struct quisk_cfFilter *cbpf;
 
 /*
  * QPSK Quadrant bit-pair values - Gray Coded
@@ -80,6 +81,27 @@ static float cnormf(complex float val) {
     float imagf = cimagf(val);
 
     return realf * realf + imagf * imagf;
+}
+
+/*
+ * FIR Filter with specified impulse length used at 8 kHz
+ */
+static void fir(complex float memory[], complex float sample[], int length) {
+    for (int j = 0; j < length; j++) {
+        for (int i = 0; i < (NTAPS - 1); i++) {
+            memory[i] = memory[i + 1];
+        }
+
+        memory[(NTAPS - 1)] = sample[j];
+
+        complex float y = 0.0f;
+
+        for (int i = 0; i < NTAPS; i++) {
+            y += (memory[i] * alpha31_root[i]);
+        }
+
+        sample[j] = y;
+    }
 }
 
 /*
@@ -136,8 +158,7 @@ static void freq_shift(complex float out[], complex float in[], int index,
 /*
  * Receive function
  * 
- * Basically we receive a 1600 baud QPSK signal where each symbol
- * is made up of 5 cycles which results in (1600 * 5) 8000 samples/sec.
+ * Basically we receive a 1600 baud QPSK at 8000 samples/sec.
  * 
  * The signal has an I and a Q channel, so we receive PCM as stereo.
  * 
@@ -148,37 +169,30 @@ static void freq_shift(complex float out[], complex float in[], int index,
  * per packet, or frame size * 2.
  */
 void rx_frame(int16_t in[], int bits[], FILE *fout) {
-    complex float bpfilt[FRAME_SIZE];
     int16_t pcm[FRAME_SIZE * 2];
 
     /*
      * Convert input stereo PCM to I and Q complex samples
+     * Translate to baseband at 8 kHz sample rate
      */
     for (int i = 0, j = 0; j < FRAME_SIZE; i += 2, j++) {
+        fbb_rx_phase *= fbb_rx_rect;
+
         float valI = ((float) in[i] / 16384.0f); // convert back to +/- .5
         float valQ = ((float) in[i + 1] / 16384.0f);
         complex float temp = (valI + valQ * I);
 
         input_frame[j] = input_frame[FRAME_SIZE + j];
-        input_frame[FRAME_SIZE + j] = temp;
-    }
-
-    /*
-     * Complex Root Cosine Filter
-     */
-    quisk_ccfFilter(input_frame, bpfilt, FRAME_SIZE, cbpf);
-
-    /*
-     * Translate to baseband
-     */
-    for (int i = 0; i < FRAME_SIZE; i++) {
-        fbb_rx_phase *= fbb_rx_rect;
-
-        bpfilt[i] *= fbb_rx_phase;
+        input_frame[FRAME_SIZE + j] = temp * fbb_rx_phase;
     }
 
     fbb_rx_phase /= cabsf(fbb_rx_phase);    // normalize as magnitude can drift
-    
+
+    /*
+     * Root Cosine Filter
+     */
+    fir(rx_filter, input_frame, FRAME_SIZE);
+
 #ifdef TEST_OUT
     /* Display baseband */
     
@@ -187,8 +201,8 @@ void rx_frame(int16_t in[], int bits[], FILE *fout) {
         /*
          * Output the frame in stereo at 8000 samples/sec
          */
-        pcm[i] = (int16_t)(crealf(bpfilt[j]) * 16384.0f);
-        pcm[i + 1] = (int16_t)(cimagf(bpfilt[j]) * 16384.0f);
+        pcm[i] = (int16_t)(crealf(input_frame[j]) * 16384.0f);
+        pcm[i + 1] = (int16_t)(cimagf(input_frame[j]) * 16384.0f);
     }
     
     fwrite(pcm, sizeof (int16_t), (FRAME_SIZE * 2), fout);
@@ -199,10 +213,10 @@ void rx_frame(int16_t in[], int bits[], FILE *fout) {
      */
     for (int i = 0; i < (FRAME_SIZE / CYCLES); i++) {
         decimated_frame[i] = decimated_frame[(FRAME_SIZE / CYCLES) + i];
-        decimated_frame[(FRAME_SIZE / CYCLES) + i] = bpfilt[(i * CYCLES)];
+        decimated_frame[(FRAME_SIZE / CYCLES) + i] = input_frame[(i * CYCLES)];
 #ifdef TEST_SCATTER
         fprintf(stderr,"%f %f\n", crealf(decimated_frame[(FRAME_SIZE / CYCLES) + i]), cimagf(decimated_frame[(FRAME_SIZE / CYCLES) + i]));
-#endif        
+#endif 
     }
 
     int dibit[2];
@@ -303,16 +317,23 @@ void qpsk_demod(complex float symbol, int bits[]) {
  */
 int tx_frame(int16_t samples[], complex float symbol[], int length) {
     complex float signal[(length * CYCLES)];
-    complex float bpfilt[(length * CYCLES)];
 
     /*
-     * Build the 1600 baud packet Frame
+     * Build the 1600 baud packet Frame zero filling
+     * for 8 kHz sample rate.
      */
     for (int i = 0; i < length; i++) {
-        for (int j = 0; j < CYCLES; j++) {
-            signal[(i * CYCLES) + j] = symbol[i];
+        signal[(i * CYCLES)] = symbol[i];
+        
+        for (int j = 1; j < CYCLES; j++) {
+            signal[(i * CYCLES) + j] = 0.0f;
         }
     }
+
+    /*
+     * Root Cosine Filter
+     */
+    fir(tx_filter, signal, (length * CYCLES));
 
     /*
      * Shift Baseband to 1200 Hz Center Frequency
@@ -323,12 +344,6 @@ int tx_frame(int16_t samples[], complex float symbol[], int length) {
     }
     
     fbb_tx_phase /= cabsf(fbb_tx_phase); // normalize as magnitude can drift
-
-    /*
-     * Complex Root Cosine Filter
-     */
-    quisk_ccfFilter(signal, bpfilt, (length * CYCLES), cbpf);
-    memmove(signal, bpfilt, (length * CYCLES) * sizeof (complex float));
 
     /*
      * Now return the resulting I+Q samples
@@ -370,10 +385,6 @@ int main(int argc, char** argv) {
 
     srand(time(0));
     
-    /* Turn off output text stream buffering */
-
-    setvbuf(stdout, NULL, _IONBF, BUFSIZ);
-
     /*
      * Create a complex float table of pilot values
      * for correlation algorithm
@@ -382,24 +393,10 @@ int main(int argc, char** argv) {
         pilot_table[i] = (float) pilotvalues[i]; // complex -1.0 or 1.0
     }
 
-    cbpf = malloc(sizeof(struct quisk_cfFilter));
-
-    /* cbpf = complex band-pass filter */
-
-    quisk_filt_cfInit(cbpf, alpha31_root, sizeof (alpha31_root) / sizeof (float));
-    
-    /* Set the filter center frequency */
-
-    quisk_cfTune(cbpf, CENTER);
-
     /*
      * create the BPSK/QPSK pilot time-domain waveform
      */
     fout = fopen(TX_FILENAME, "wb");
-
-    /* Turn off PCM stream buffering */
-
-    setvbuf(fout, NULL, _IONBF, BUFSIZ);
 
     /*
      * This simulates the transmitted packets
@@ -438,11 +435,6 @@ int main(int argc, char** argv) {
     fin = fopen(TX_FILENAME, "rb");
     fout = fopen(RX_FILENAME, "wb");
 
-    /* Turn off PCM stream buffering */
-
-    setvbuf(fin, NULL, _IONBF, BUFSIZ);
-    setvbuf(fout, NULL, _IONBF, BUFSIZ);
-
     fbb_rx_phase = cmplx(0.0f);
     fbb_rx_rect = cmplx(TAU * -CENTER / FS);
 
@@ -460,8 +452,6 @@ int main(int argc, char** argv) {
 
     fclose(fin);
     fclose(fout);
-
-    quisk_filt_destroy(cbpf);
 
     return (EXIT_SUCCESS);
 }
