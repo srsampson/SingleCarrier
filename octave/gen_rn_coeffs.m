@@ -36,5 +36,5 @@ function coeffs = gen_rn_coeffs(alpha, T, Rs, Nsym, M)
   end
   GF_alpha5_root = sqrt(abs(GF_alpha5)) .* exp(j*angle(GF_alpha5));
   ifft_GF_alpha5_root = ifft(GF_alpha5_root);
-  coeffs = real((ifft_GF_alpha5_root(1:Nfilter)));
+  coeffs = real((ifft_GF_alpha5_root(2:Nfilter))); % delete first coeff [SRS]
 endfunction
