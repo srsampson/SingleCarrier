@@ -39,8 +39,6 @@ static complex float input_frame[(FRAME_SIZE * 2)];
 static complex float decimated_frame[564]; /* file scope warning in GNU using var */
 static complex float pilot_table[PILOT_SYMBOLS];
 
-static int sync_position;
-
 // Two phase for full duplex
 
 static complex float fbb_tx_phase;
@@ -110,21 +108,21 @@ static float correlate_pilots(complex float symbol[], int index) {
         out += (pilot_table[i] * symbol[j]);
     }
 
-    return cabsf(out);
+    return cnormf(out);
 }
 
 static float magnitude_pilots(complex float symbol[], int index) {
     complex float out = 0.0f;
 
     for (int i = index; i < (PILOT_SYMBOLS + index); i++) {
-        out += symbol[i];
+        out += (symbol[i] * symbol[i]);
     }
 
-    return cabsf(out);
+    return (crealf(out) + cimagf(out));
 }
 
 /*
- * Useful for operator receiver fine tuning
+ * Useful for operator offset of receiver fine tuning
  */
 static void freq_shift(complex float out[], complex float in[], int index,
         int length, float fshift, complex float phase_rect) {
@@ -185,7 +183,7 @@ void rx_frame(int16_t in[], int bits[], FILE *fout) {
     fbb_rx_phase /= cabsf(fbb_rx_phase); // normalize as magnitude can drift
 
     /*
-     * Root Cosine Filter
+     * Raised Root Cosine Filter
      */
     fir(rx_filter, input_frame, FRAME_SIZE);
 
@@ -251,16 +249,18 @@ void rx_frame(int16_t in[], int bits[], FILE *fout) {
         }
     }
 
-    sync_position = max_index;
-    mean = magnitude_pilots(decimated_frame, sync_position);
+    mean = magnitude_pilots(decimated_frame, max_index);
 
-    printf("%d %.2f\n", sync_position, mean);
+    printf("%d %.2f %.2f\n", max_index, max_value, mean);
+    
+    if (max_value > (mean * 20.0f)) {
+        for (int i = max_index; i < (PILOT_SYMBOLS + max_index); i++) {
+            complex float symbol = decimated_frame[i];
+            
+            qpsk_demod(symbol, dibit);
 
-    for (int i = sync_position; i < (PILOT_SYMBOLS + sync_position); i++) {
-        complex float symbol = decimated_frame[i];
-        qpsk_demod(symbol, dibit);
-
-        printf("%d%d ", dibit[1], dibit[0]);
+            printf("%d%d ", dibit[1], dibit[0]);
+        }
     }
 
     printf("\n\n");
