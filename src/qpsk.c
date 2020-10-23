@@ -31,6 +31,7 @@ static float magnitude_pilots(complex float [], int);
 // Defines
 #define TX_FILENAME "/tmp/spectrum-filtered.raw"
 #define RX_FILENAME "/tmp/spectrum.raw"
+#define FINE_TIMING_OFFSET 3                            /* manual/hard coded fine timing estimation for now */
 
 // Globals
 
@@ -213,7 +214,7 @@ void rx_frame(int16_t in[], int bits[], FILE *fout) {
      */
     for (int i = 0; i < (FRAME_SIZE / CYCLES); i++) {
         decimated_frame[i] = decimated_frame[(FRAME_SIZE / CYCLES) + i];
-        decimated_frame[(FRAME_SIZE / CYCLES) + i] = input_frame[(i * CYCLES)];
+        decimated_frame[(FRAME_SIZE / CYCLES) + i] = input_frame[(i * CYCLES) + FINE_TIMING_OFFSET];
 #ifdef TEST_SCATTER
         fprintf(stderr,"%f %f\n", crealf(decimated_frame[(FRAME_SIZE / CYCLES) + i]), cimagf(decimated_frame[(FRAME_SIZE / CYCLES) + i]));
 #endif 
