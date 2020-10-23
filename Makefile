@@ -4,7 +4,7 @@ SRC=src/qpsk.c
 HEADER=headers/filter_coef.h headers/qpsk.h
 
 qpsk: ${SRC} ${HEADER}
-	gcc -Iheaders ${SRC} -DTEST_SCATTER -o qpsk -Wall -lm
+	gcc -std=c11 -Iheaders ${SRC} -DTEST_SCATTER -o qpsk -Wall -lm
 
 # generate scatter diagram PNG
 test_scatter: qpsk

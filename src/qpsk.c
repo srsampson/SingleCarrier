@@ -28,11 +28,6 @@ static void fir(complex float [], complex float [], int);
 static float correlate_pilots(complex float [], int);
 static float magnitude_pilots(complex float [], int);
 
-// Defines
-#define TX_FILENAME "/tmp/spectrum-filtered.raw"
-#define RX_FILENAME "/tmp/spectrum.raw"
-#define FINE_TIMING_OFFSET 3                            /* manual/hard coded fine timing estimation for now */
-
 // Globals
 
 static FILE *fin;
@@ -59,10 +54,10 @@ static complex float fbb_rx_rect;
  * Non-static so they can be used by other modules
  */
 const complex float constellation[] = {
-    1.0f + 0.0f * I,    //  I
-    0.0f + 1.0f * I,    //  Q
-    0.0f - 1.0f * I,    // -Q
-    -1.0f + 0.0f * I    // -I
+    1.0f + 0.0f * I, //  I
+    0.0f + 1.0f * I, //  Q
+    0.0f - 1.0f * I, // -Q
+    -1.0f + 0.0f * I // -I
 };
 
 /*
@@ -120,7 +115,7 @@ static float correlate_pilots(complex float symbol[], int index) {
 
 static float magnitude_pilots(complex float symbol[], int index) {
     complex float out = 0.0f;
-    
+
     for (int i = index; i < (PILOT_SYMBOLS + index); i++) {
         out += symbol[i];
     }
@@ -133,27 +128,27 @@ static float magnitude_pilots(complex float symbol[], int index) {
  */
 static void freq_shift(complex float out[], complex float in[], int index,
         int length, float fshift, complex float phase_rect) {
-    
+
     complex float foffset_rect = cmplx(TAU * fshift / FS);
-    
+
     /*
      * Use a copy of the receive data to leave it alone
      * for other algorithms (Probably not needed).
      */
-    complex float *copy = (complex float *) calloc(sizeof(complex float), length);
+    complex float *copy = (complex float *) calloc(sizeof (complex float), length);
 
     for (int i = index, j = 0; i < length; i++, j++) {
         copy[j] = in[index];
     }
 
     for (int i = 0; i < length; i++) {
-	phase_rect *= foffset_rect;
-	out[i] = copy[i] * phase_rect;
+        phase_rect *= foffset_rect;
+        out[i] = copy[i] * phase_rect;
     }
 
     free(copy);
 
-    phase_rect /= cabsf(phase_rect);    // normalize as magnitude can drift
+    phase_rect /= cabsf(phase_rect); // normalize as magnitude can drift
 }
 
 /*
@@ -187,7 +182,7 @@ void rx_frame(int16_t in[], int bits[], FILE *fout) {
         input_frame[FRAME_SIZE + j] = temp * fbb_rx_phase;
     }
 
-    fbb_rx_phase /= cabsf(fbb_rx_phase);    // normalize as magnitude can drift
+    fbb_rx_phase /= cabsf(fbb_rx_phase); // normalize as magnitude can drift
 
     /*
      * Root Cosine Filter
@@ -196,19 +191,19 @@ void rx_frame(int16_t in[], int bits[], FILE *fout) {
 
 #ifdef TEST_OUT
     /* Display baseband */
-    
+
     for (int i = 0, j = 0; j < FRAME_SIZE; i += 2, j++) {
-        
+
         /*
          * Output the frame in stereo at 8000 samples/sec
          */
-        pcm[i] = (int16_t)(crealf(input_frame[j]) * 16384.0f);
-        pcm[i + 1] = (int16_t)(cimagf(input_frame[j]) * 16384.0f);
+        pcm[i] = (int16_t) (crealf(input_frame[j]) * 16384.0f);
+        pcm[i + 1] = (int16_t) (cimagf(input_frame[j]) * 16384.0f);
     }
-    
+
     fwrite(pcm, sizeof (int16_t), (FRAME_SIZE * 2), fout);
 #endif
-        
+
     /*
      * Decimate by 5 to the 1600 symbol rate
      */
@@ -216,7 +211,7 @@ void rx_frame(int16_t in[], int bits[], FILE *fout) {
         decimated_frame[i] = decimated_frame[(FRAME_SIZE / CYCLES) + i];
         decimated_frame[(FRAME_SIZE / CYCLES) + i] = input_frame[(i * CYCLES) + FINE_TIMING_OFFSET];
 #ifdef TEST_SCATTER
-        fprintf(stderr,"%f %f\n", crealf(decimated_frame[(FRAME_SIZE / CYCLES) + i]), cimagf(decimated_frame[(FRAME_SIZE / CYCLES) + i]));
+        fprintf(stderr, "%f %f\n", crealf(decimated_frame[(FRAME_SIZE / CYCLES) + i]), cimagf(decimated_frame[(FRAME_SIZE / CYCLES) + i]));
 #endif 
     }
 
@@ -228,13 +223,13 @@ void rx_frame(int16_t in[], int bits[], FILE *fout) {
      */
     for (int i = 0; i < (FRAME_SIZE / CYCLES); i++) {
         qpsk_demod(decimated_frame[i], dibit);
-        
+
         printf("%d%d ", dibit[1], dibit[0]);
     }
-    
+
     printf("\n\n");
 #endif
-    
+
 #ifdef TEST2
     /*
      * List the correlation match
@@ -255,19 +250,19 @@ void rx_frame(int16_t in[], int bits[], FILE *fout) {
             max_index = i;
         }
     }
-    
+
     sync_position = max_index;
     mean = magnitude_pilots(decimated_frame, sync_position);
-    
+
     printf("%d %.2f\n", sync_position, mean);
-    
+
     for (int i = sync_position; i < (PILOT_SYMBOLS + sync_position); i++) {
         complex float symbol = decimated_frame[i];
         qpsk_demod(symbol, dibit);
-        
+
         printf("%d%d ", dibit[1], dibit[0]);
     }
-    
+
     printf("\n\n");
 #endif
 }
@@ -307,25 +302,25 @@ complex float qpsk_mod(int bits[]) {
 void qpsk_demod(complex float symbol, int bits[]) {
     complex float rotate = symbol * cmplx(ROTATE45);
 
-    bits[0] = crealf(rotate) < 0.0f;    // I < 0 ?
-    bits[1] = cimagf(rotate) < 0.0f;    // Q < 0 ?
+    bits[0] = crealf(rotate) < 0.0f; // I < 0 ?
+    bits[1] = cimagf(rotate) < 0.0f; // Q < 0 ?
 }
 
 /*
  * Modulate the symbols by first upsampling to 8 kHz sample rate,
- * and translating the spectrum to 1200 Hz, where it is complex filtered
+ * and translating the spectrum to 1200 Hz, where it is filtered
  * using the root raised cosine coefficients.
  */
 int tx_frame(int16_t samples[], complex float symbol[], int length) {
     complex float signal[(length * CYCLES)];
 
     /*
-     * Build the 1600 baud packet Frame zero filling
+     * Build the 1600 baud packet Frame zero padding
      * for 8 kHz sample rate.
      */
     for (int i = 0; i < length; i++) {
         signal[(i * CYCLES)] = symbol[i];
-        
+
         for (int j = 1; j < CYCLES; j++) {
             signal[(i * CYCLES) + j] = 0.0f;
         }
@@ -343,7 +338,7 @@ int tx_frame(int16_t samples[], complex float symbol[], int length) {
         fbb_tx_phase *= fbb_tx_rect;
         signal[i] *= fbb_tx_phase;
     }
-    
+
     fbb_tx_phase /= cabsf(fbb_tx_phase); // normalize as magnitude can drift
 
     /*
@@ -352,10 +347,10 @@ int tx_frame(int16_t samples[], complex float symbol[], int length) {
     for (int i = 0, j = 0; j < (length * CYCLES); i += 2, j++) {
         complex float temp = signal[j];
 
-        samples[i] = (int16_t) (crealf(temp) * 16384.0f);   // I at @ .5
-        samples[i+1] = (int16_t) (cimagf(temp) * 16384.0f); // Q at @ .5
+        samples[i] = (int16_t) (crealf(temp) * 16384.0f); // I at @ .5
+        samples[i + 1] = (int16_t) (cimagf(temp) * 16384.0f); // Q at @ .5
     }
-    
+
     return (length * CYCLES) * 2;
 }
 
@@ -385,7 +380,7 @@ int main(int argc, char** argv) {
     int length;
 
     srand(time(0));
-    
+
     /*
      * Create a complex float table of pilot values
      * for correlation algorithm
@@ -402,16 +397,16 @@ int main(int argc, char** argv) {
     /*
      * This simulates the transmitted packets
      */
-    
+
     fbb_tx_phase = cmplx(0.0f);
     fbb_tx_rect = cmplx(TAU * CENTER / FS);
-    
+
     for (int k = 0; k < 500; k++) {
         // 33 BPSK pilots
         length = bpsk_pilot_modulate(frame);
-        
+
         fwrite(frame, sizeof (int16_t), length, fout);
-        
+
         /*
          * NS data frames between each pilot frame
          */
@@ -421,9 +416,9 @@ int main(int argc, char** argv) {
                 bits[i] = rand() % 2;
                 bits[i + 1] = rand() % 2;
             }
-            
+
             length = qpsk_data_modulate(frame, bits, DATA_SYMBOLS);
-            
+
             fwrite(frame, sizeof (int16_t), length, fout);
         }
     }

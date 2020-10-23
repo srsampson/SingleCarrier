@@ -11,8 +11,13 @@ extern "C"
 #include <stdint.h>
 #include <math.h> 
 
+#define TX_FILENAME "/tmp/spectrum-filtered.raw"
+#define RX_FILENAME "/tmp/spectrum.raw"
+
 #define NTAPS           50
-#define FRATE           5
+
+/* manual/hard coded fine timing estimation for now */
+#define FINE_TIMING_OFFSET 3
 
 #define FS              8000.0f
 #define RS              1600.0f
@@ -23,7 +28,7 @@ extern "C"
 
 #define PILOT_SYMBOLS   33
 #define DATA_SYMBOLS    31
-    
+
 #define PILOT_SAMPLES   (PILOT_SYMBOLS * CYCLES)
 #define DATA_SAMPLES    (DATA_SYMBOLS * CYCLES * NS)
 #define FRAME_SIZE      1405
@@ -35,8 +40,12 @@ extern "C"
 #define TAU             (2.0f * M_PI)
 #define ROTATE45        (M_PI / 4.0f)
 
-#define cmplx(value) (cosf(value) + sinf(value) * I)
-#define cmplxconj(value) (cosf(value) + sinf(value) * -I)
+/*
+ * This method is much faster than using cexp()
+ * float_value - must be a float
+ */
+#define cmplx(float_value) (cosf(float_value) + sinf(float_value) * I)
+#define cmplxconj(float_value) (cosf(float_value) + sinf(float_value) * -I)
 
 typedef struct
 {
