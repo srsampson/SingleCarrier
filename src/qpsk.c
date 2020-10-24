@@ -1,5 +1,3 @@
-#define TEST_OUT
-//#define TEST2
 /*
  * qpsk.c
  *
@@ -34,11 +32,14 @@ static float magnitude_pilots(complex float [], int);
 static FILE *fin;
 static FILE *fout;
 
+static State state;
+
 static complex float tx_filter[NTAPS];
 static complex float rx_filter[NTAPS];
 static complex float input_frame[(FRAME_SIZE * 2)];
 static complex float decimated_frame[562]; // (FRAME_SIZE / CYCLES) * 2
 static complex float pilot_table[PILOT_SYMBOLS];
+static complex float rx_pilot[PILOT_SYMBOLS];
 
 // Two phase for full duplex
 
@@ -187,7 +188,6 @@ static int find_quadrant(complex float symbol) {
  * This is (33 * 5) = 165 + (31 * 5 * 8) = 1240 or 1405 samples per packet
  */
 void rx_frame(int16_t in[], int bits[], FILE *fout) {
-    int16_t pcm[FRAME_SIZE];
     complex float val;
 
     /*
@@ -210,20 +210,6 @@ void rx_frame(int16_t in[], int bits[], FILE *fout) {
      */
     fir(rx_filter, input_frame, FRAME_SIZE);
 
-#ifdef TEST_OUT
-    /* Display baseband */
-
-    for (int i = 0; i < FRAME_SIZE; i++) {
-
-        /*
-         * Output the frame at 8000 samples/sec
-         */
-        pcm[i] = (int16_t) (crealf(input_frame[i]) * 16384.0f);
-    }
-
-    fwrite(pcm, sizeof (int16_t), FRAME_SIZE, fout);
-#endif
-
     /*
      * Decimate by 5 to the 1600 symbol rate
      */
@@ -235,33 +221,17 @@ void rx_frame(int16_t in[], int bits[], FILE *fout) {
 #endif 
     }
 
+#ifdef TEST1
     for (int i = 0; i < (FRAME_SIZE / CYCLES); i++) {    
         printf("%d ", find_quadrant(decimated_frame[i]));
     }
     
     printf("\n\n");
-
-    int dibit[2];
-
-#ifdef TEST1
-    /*
-     * Just list the demodulated values
-     */
-    for (int i = 0; i < (FRAME_SIZE / CYCLES); i++) {
-        qpsk_demod(decimated_frame[i], dibit);
-
-        printf("%d%d ", dibit[1], dibit[0]);
-    }
-
-    printf("\n\n");
 #endif
 
-#ifdef TEST2
     /*
      * List the correlation match
      */
-
-    /* Hunting for the pilot preamble sequence */
 
     float temp_value = 0.0f;
     float max_value = 0.0f;
@@ -279,20 +249,28 @@ void rx_frame(int16_t in[], int bits[], FILE *fout) {
 
     mean = magnitude_pilots(decimated_frame, max_index);
 
+#ifdef TEST2
     printf("%d %.2f %.2f\n", max_index, max_value, mean);
-    
-    if (max_value > (mean * 20.0f)) {
-        for (int i = max_index; i < (PILOT_SYMBOLS + max_index); i++) {
-            complex float symbol = decimated_frame[i];
-            
-            qpsk_demod(symbol, dibit);
-
-            printf("%d%d ", dibit[1], dibit[0]);
-        }
-    }
-
-    printf("\n\n");
 #endif
+    
+    /* Hunting for the pilot preamble sequence */
+
+    if (max_value > (mean * 20.0f)) {
+        for (int i = 0, j = max_index; j < (PILOT_SYMBOLS + max_index); i++, j++) {
+            /*
+             * Save the pilots for the coherent process
+             */
+            rx_pilot[i] = decimated_frame[j];
+        }
+        
+        /*
+         * Now process data symbols TODO
+         */
+        
+        state = process;
+    } else {
+        state = hunt;
+    }
 }
 
 /*
