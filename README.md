@@ -9,6 +9,8 @@ The design is driven by the FreeDV 2020 Specifications which were originally des
 #### Development
 Currently working on the low level code. The modulation/demodulation seems to work. Requires fine timing code.
 
+Changed the input/output to real part only PCM, as most radios are just single channel audio input. This results in a bit of smearing on scatter diagram.
+
 #### Building from git clone & scatter diagram tests
 
 ```
