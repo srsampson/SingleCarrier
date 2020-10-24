@@ -1,5 +1,5 @@
 #define TEST_OUT
-#define TEST2
+//#define TEST2
 /*
  * qpsk.c
  *
@@ -23,6 +23,7 @@
 // Prototypes
 
 static float cnormf(complex float);
+static int find_quadrant(complex float);
 static void freq_shift(complex float [], complex float [], int, int, float, complex float);
 static void fir(complex float [], complex float [], int);
 static float correlate_pilots(complex float [], int);
@@ -36,7 +37,7 @@ static FILE *fout;
 static complex float tx_filter[NTAPS];
 static complex float rx_filter[NTAPS];
 static complex float input_frame[(FRAME_SIZE * 2)];
-static complex float decimated_frame[564]; /* file scope warning in GNU using var */
+static complex float decimated_frame[562]; // (FRAME_SIZE / CYCLES) * 2
 static complex float pilot_table[PILOT_SYMBOLS];
 
 // Two phase for full duplex
@@ -149,35 +150,57 @@ static void freq_shift(complex float out[], complex float in[], int index,
     phase_rect /= cabsf(phase_rect); // normalize as magnitude can drift
 }
 
+static int find_quadrant(complex float symbol) {
+    float quadrant;
+
+    /*
+     * The smallest distance between constellation
+     * and the symbol, is our gray coded quadrant.
+     * 
+     *      1
+     *      |
+     *  3---+---0
+     *      |
+     *      2
+     */
+
+    float min_value = 20.0f; // some large value
+
+    for (int i = 0; i < 4; i++) {
+        float dist = cnormf(symbol - constellation[i]);
+
+        if (dist < min_value) {
+            min_value = dist;
+            quadrant = i;
+        }
+    }
+
+    return quadrant;
+}
+
 /*
  * Receive function
  * 
  * Basically we receive a 1600 baud QPSK at 8000 samples/sec.
  * 
- * The signal has an I and a Q channel, so we receive PCM as stereo.
- * 
  * Each frame is made up of 33 Pilots and 31 x 8 Data symbols.
  * This is (33 * 5) = 165 + (31 * 5 * 8) = 1240 or 1405 samples per packet
- * 
- * Since there is the I and the Q, this means we will receive 2810 samples
- * per packet, or frame size * 2.
  */
 void rx_frame(int16_t in[], int bits[], FILE *fout) {
-    int16_t pcm[FRAME_SIZE * 2];
+    int16_t pcm[FRAME_SIZE];
+    complex float val;
 
     /*
-     * Convert input stereo PCM to I and Q complex samples
-     * Translate to baseband at 8 kHz sample rate
+     * Convert input PCM to complex samples
+     * Translate to baseband at an 8 kHz sample rate
      */
-    for (int i = 0, j = 0; j < FRAME_SIZE; i += 2, j++) {
+    for (int i = 0; i < FRAME_SIZE; i++) {
         fbb_rx_phase *= fbb_rx_rect;
-
-        float valI = ((float) in[i] / 16384.0f); // convert back to +/- .5
-        float valQ = ((float) in[i + 1] / 16384.0f);
-        complex float temp = (valI + valQ * I);
-
-        input_frame[j] = input_frame[FRAME_SIZE + j];
-        input_frame[FRAME_SIZE + j] = temp * fbb_rx_phase;
+        
+        val = ((float) in[i] / 16384.0f) + 0.0f * I;
+        
+        input_frame[i] = input_frame[FRAME_SIZE + i];
+        input_frame[FRAME_SIZE + i] = val * fbb_rx_phase;
     }
 
     fbb_rx_phase /= cabsf(fbb_rx_phase); // normalize as magnitude can drift
@@ -190,16 +213,15 @@ void rx_frame(int16_t in[], int bits[], FILE *fout) {
 #ifdef TEST_OUT
     /* Display baseband */
 
-    for (int i = 0, j = 0; j < FRAME_SIZE; i += 2, j++) {
+    for (int i = 0; i < FRAME_SIZE; i++) {
 
         /*
-         * Output the frame in stereo at 8000 samples/sec
+         * Output the frame at 8000 samples/sec
          */
-        pcm[i] = (int16_t) (crealf(input_frame[j]) * 16384.0f);
-        pcm[i + 1] = (int16_t) (cimagf(input_frame[j]) * 16384.0f);
+        pcm[i] = (int16_t) (crealf(input_frame[i]) * 16384.0f);
     }
 
-    fwrite(pcm, sizeof (int16_t), (FRAME_SIZE * 2), fout);
+    fwrite(pcm, sizeof (int16_t), FRAME_SIZE, fout);
 #endif
 
     /*
@@ -212,6 +234,12 @@ void rx_frame(int16_t in[], int bits[], FILE *fout) {
         fprintf(stderr, "%f %f\n", crealf(decimated_frame[(FRAME_SIZE / CYCLES) + i]), cimagf(decimated_frame[(FRAME_SIZE / CYCLES) + i]));
 #endif 
     }
+
+    for (int i = 0; i < (FRAME_SIZE / CYCLES); i++) {    
+        printf("%d ", find_quadrant(decimated_frame[i]));
+    }
+    
+    printf("\n\n");
 
     int dibit[2];
 
@@ -342,16 +370,14 @@ int tx_frame(int16_t samples[], complex float symbol[], int length) {
     fbb_tx_phase /= cabsf(fbb_tx_phase); // normalize as magnitude can drift
 
     /*
-     * Now return the resulting I+Q samples
+     * Now return the resulting real samples
+     * (imaginary part discarded)
      */
-    for (int i = 0, j = 0; j < (length * CYCLES); i += 2, j++) {
-        complex float temp = signal[j];
-
-        samples[i] = (int16_t) (crealf(temp) * 16384.0f); // I at @ .5
-        samples[i + 1] = (int16_t) (cimagf(temp) * 16384.0f); // Q at @ .5
+    for (int i = 0; i < (length * CYCLES); i++) {
+        samples[i] = (int16_t) (crealf(signal[i]) * 16384.0f); // I at @ .5
     }
 
-    return (length * CYCLES) * 2;
+    return (length * CYCLES);
 }
 
 int bpsk_pilot_modulate(int16_t samples[]) {
@@ -376,7 +402,7 @@ int qpsk_data_modulate(int16_t samples[], int tx_bits[], int length) {
 
 int main(int argc, char** argv) {
     int bits[6400];
-    int16_t frame[FRAME_SIZE * 2];
+    int16_t frame[FRAME_SIZE];
     int length;
 
     srand(time(0));
@@ -438,9 +464,9 @@ int main(int argc, char** argv) {
         /*
          * Read in the 2810 I+Q samples
          */
-        size_t count = fread(frame, sizeof (int16_t), (FRAME_SIZE * 2), fin);
+        size_t count = fread(frame, sizeof (int16_t), FRAME_SIZE, fin);
 
-        if (count != (FRAME_SIZE * 2))
+        if (count != FRAME_SIZE)
             break;
 
         rx_frame(frame, bits, fout);
