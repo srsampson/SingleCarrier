@@ -26,6 +26,7 @@ static void freq_shift(complex float [], complex float [], int, int, float, comp
 static void fir(complex float [], complex float [], int);
 static float correlate_pilots(complex float [], int);
 static float magnitude_pilots(complex float [], int);
+static void receive_end(void);
 
 // Globals
 
@@ -48,6 +49,10 @@ static complex float fbb_tx_rect;
 
 static complex float fbb_rx_phase;
 static complex float fbb_rx_rect;
+
+#ifdef DEBUG
+    int pilot_frames_detected = 0;
+#endif
 
 /*
  * QPSK Quadrant bit-pair values - Gray Coded
@@ -113,14 +118,17 @@ static float correlate_pilots(complex float symbol[], int index) {
     return cnormf(out);
 }
 
+/*
+ * Save time, skip sqrt()
+ */
 static float magnitude_pilots(complex float symbol[], int index) {
-    complex float out = 0.0f;
+    float out = 0.0f;
 
     for (int i = index; i < (PILOT_SYMBOLS + index); i++) {
-        out += (symbol[i] * symbol[i]);
+        out += cnormf(symbol[i]);
     }
-
-    return (crealf(out) + cimagf(out));
+    
+    return out;
 }
 
 /*
@@ -130,7 +138,7 @@ static void freq_shift(complex float out[], complex float in[], int index,
         int length, float fshift, complex float phase_rect) {
 
     complex float foffset_rect = cmplx(TAU * fshift / FS);
-
+    
     /*
      * Use a copy of the receive data to leave it alone
      * for other algorithms (Probably not needed).
@@ -165,7 +173,7 @@ static int find_quadrant(complex float symbol) {
      *      2
      */
 
-    float min_value = 20.0f; // some large value
+    float min_value = 200.0f; // some large value
 
     for (int i = 0; i < 4; i++) {
         float dist = cnormf(symbol - constellation[i]);
@@ -221,17 +229,7 @@ void rx_frame(int16_t in[], int bits[], FILE *fout) {
 #endif 
     }
 
-#ifdef TEST1
-    for (int i = 0; i < (FRAME_SIZE / CYCLES); i++) {    
-        printf("%d ", find_quadrant(decimated_frame[i]));
-    }
-    
-    printf("\n\n");
-#endif
-
-    /*
-     * List the correlation match
-     */
+    /* Hunting for the pilot preamble sequence */
 
     float temp_value = 0.0f;
     float max_value = 0.0f;
@@ -249,13 +247,12 @@ void rx_frame(int16_t in[], int bits[], FILE *fout) {
 
     mean = magnitude_pilots(decimated_frame, max_index);
 
-#ifdef TEST2
-    printf("%d %.2f %.2f\n", max_index, max_value, mean);
+    if (max_value > (mean * 30.0f)) {
+#ifdef DEBUG
+        pilot_frames_detected++;
+        printf("Frames: %d MaxIdx: %d MaxVal: %.2f Mean: %.2f\n",
+                pilot_frames_detected, max_index, max_value, mean);
 #endif
-    
-    /* Hunting for the pilot preamble sequence */
-
-    if (max_value > (mean * 20.0f)) {
         for (int i = 0, j = max_index; j < (PILOT_SYMBOLS + max_index); i++, j++) {
             /*
              * Save the pilots for the coherent process
@@ -269,8 +266,18 @@ void rx_frame(int16_t in[], int bits[], FILE *fout) {
         
         state = process;
     } else {
+        /*
+         * Burn remainder of frame
+         */
         state = hunt;
     }
+}
+
+/*
+ * Dead man switch to state end
+ */
+static void receive_end() {
+    state = hunt;
 }
 
 /*
@@ -322,7 +329,7 @@ int tx_frame(int16_t samples[], complex float symbol[], int length) {
 
     /*
      * Build the 1600 baud packet Frame zero padding
-     * for 8 kHz sample rate.
+     * for the desired 8 kHz sample rate.
      */
     for (int i = 0; i < length; i++) {
         signal[(i * CYCLES)] = symbol[i];
@@ -338,7 +345,7 @@ int tx_frame(int16_t samples[], complex float symbol[], int length) {
     fir(tx_filter, signal, (length * CYCLES));
 
     /*
-     * Shift Baseband to 1100 Hz Center Frequency
+     * Shift Baseband to Center Frequency
      */
     for (int i = 0; i < (length * CYCLES); i++) {
         fbb_tx_phase *= fbb_tx_rect;
@@ -386,21 +393,18 @@ int main(int argc, char** argv) {
     srand(time(0));
 
     /*
-     * Create a complex float table of pilot values
-     * for correlation algorithm
+     * Create a complex table of pilot values
+     * for the correlation algorithm
      */
     for (int i = 0; i < PILOT_SYMBOLS; i++) {
         pilot_table[i] = (float) pilotvalues[i]; // complex -1.0 or 1.0
     }
 
     /*
-     * create the BPSK/QPSK pilot time-domain waveform
+     * create the BPSK pilot and QPSK data waveform.
+     * This simulates the transmitted packets.
      */
     fout = fopen(TX_FILENAME, "wb");
-
-    /*
-     * This simulates the transmitted packets
-     */
 
     fbb_tx_phase = cmplx(0.0f);
     fbb_tx_rect = cmplx(TAU * CENTER / FS);
@@ -440,7 +444,7 @@ int main(int argc, char** argv) {
 
     while (1) {
         /*
-         * Read in the 2810 I+Q samples
+         * Read in the frame samples
          */
         size_t count = fread(frame, sizeof (int16_t), FRAME_SIZE, fin);
 
