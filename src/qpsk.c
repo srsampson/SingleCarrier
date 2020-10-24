@@ -336,7 +336,7 @@ void qpsk_demod(complex float symbol, int bits[]) {
 
 /*
  * Modulate the symbols by first upsampling to 8 kHz sample rate,
- * and translating the spectrum to 1200 Hz, where it is filtered
+ * and translating the spectrum to 1100 Hz, where it is filtered
  * using the root raised cosine coefficients.
  */
 int tx_frame(int16_t samples[], complex float symbol[], int length) {
@@ -360,7 +360,7 @@ int tx_frame(int16_t samples[], complex float symbol[], int length) {
     fir(tx_filter, signal, (length * CYCLES));
 
     /*
-     * Shift Baseband to 1200 Hz Center Frequency
+     * Shift Baseband to 1100 Hz Center Frequency
      */
     for (int i = 0; i < (length * CYCLES); i++) {
         fbb_tx_phase *= fbb_tx_rect;

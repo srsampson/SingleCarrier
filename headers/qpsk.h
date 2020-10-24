@@ -24,7 +24,7 @@ extern "C"
 #define NS              8
 #define TS              (1.0f / RS)
 #define CYCLES          (int) (FS / RS)
-#define CENTER          1200.0f
+#define CENTER          1100.0f
 
 #define PILOT_SYMBOLS   33
 #define DATA_SYMBOLS    31
