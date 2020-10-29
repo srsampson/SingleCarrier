@@ -29,7 +29,7 @@
 
 // Externals
 
-extern const float alpha31_root[];
+extern const float alpha35_root[];
 
 /*
  * FIR Filter with specified impulse length used at 8 kHz
@@ -45,7 +45,7 @@ void fir(complex float memory[], complex float sample[], int length) {
         complex float y = 0.0f;
 
         for (int i = 0; i < NTAPS; i++) {
-            y += (memory[i] * alpha31_root[i]);
+            y += (memory[i] * alpha35_root[i]);
         }
 
         sample[j] = y * GAIN;

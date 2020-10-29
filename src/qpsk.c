@@ -31,7 +31,6 @@ static void receive_end(void);
 
 extern const int8_t pilotvalues[];
 extern const complex float constellation[];
-extern const float alpha31_root[];
 
 // Globals
 
