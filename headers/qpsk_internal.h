@@ -37,6 +37,9 @@ extern "C"
 #include <stdint.h>
 #include <math.h> 
 
+#define TX_FILENAME "/tmp/spectrum-filtered.raw"
+#define RX_FILENAME "/tmp/spectrum.raw"
+
 /* manual/hard coded fine timing estimation for now */
 #define FINE_TIMING_OFFSET 3
 
