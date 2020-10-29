@@ -17,9 +17,3 @@ Changed the input/output to real part only PCM, as most radios are just single c
 $ make test_scatter
 ```
 Then view `scatter.png`
-
-#### Building from export-qpsk.zip
-To build the project, unzip the ```export-qpsk.zip``` file into an empty directory, ```cd qpsk``` into it, and type ```Make``` and it will build the project, leaving the compiled file in ```dist/Debug/GNU-Linux/``` directory.
-
-This is based on its Netbeans 8.2 IDE I use for building.
-
