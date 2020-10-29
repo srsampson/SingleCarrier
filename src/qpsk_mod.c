@@ -49,7 +49,7 @@
 static complex float qpsk_mod(int []);
 static int tx_frame(int16_t [], complex float [], int, bool);
 static int bpsk_pilot_modulate(int16_t []);
-static int qpsk_data_modulate(int16_t [], uint8_t []);
+static int qpsk_data_modulate(int16_t [], uint8_t [], int);
 
 // Externals
 
@@ -168,19 +168,18 @@ static int bpsk_pilot_modulate(int16_t frame[]) {
     return tx_frame(frame, pilot_table, PILOT_SYMBOLS, false);
 }
 
-static int qpsk_data_modulate(int16_t frame[], uint8_t tx_bits[]) {
-    int length = (DATA_SYMBOLS * NS);
-    complex float symbol[length];
+static int qpsk_data_modulate(int16_t frame[], uint8_t tx_bits[], int index) {
+    complex float symbol[DATA_SYMBOLS];
     int dibit[2];
 
-    for (int i = 0, s = 0; i < length; i++, s += 2) {
+    for (int i = 0, s = index; i < DATA_SYMBOLS; i++, s += 2) {
         dibit[0] = tx_bits[s + 1] & 0x1;
         dibit[1] = tx_bits[s ] & 0x1;
 
         symbol[i] = qpsk_mod(dibit);
     }
 
-    return tx_frame(frame, symbol, length, dpsk_en);
+    return tx_frame(frame, symbol, DATA_SYMBOLS, dpsk_en);
 }
 
 int main(int argc, char *argv[]) {
@@ -291,7 +290,7 @@ int main(int argc, char *argv[]) {
         for (int i = 0; i < NS; i++) {
             // 31 QPSK 2-bit
 
-            length = qpsk_data_modulate(frame, bits);
+            length = qpsk_data_modulate(frame, bits, i * 31);
 
             fwrite(frame, sizeof (int16_t), length, fout);
         }
