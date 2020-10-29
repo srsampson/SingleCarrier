@@ -3,6 +3,9 @@
 SRC=src/fir.c src/constants.c src/qpsk_mod.c
 HEADER=headers/fir.h headers/optparse.h headers/qpsk_internal.h
 
+qpsk_get_test_bits:
+	gcc -std=c11 -Iheaders src/qpsk_get_test_bits.c -o qpsk_get_test_bits -Wall 
+
 qpsk_mod: ${SRC} ${HEADER}
 	gcc -std=c11 -Iheaders ${SRC} -o qpsk_mod -Wall -lm
 
