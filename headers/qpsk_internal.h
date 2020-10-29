@@ -1,3 +1,29 @@
+/*---------------------------------------------------------------------------*\
+
+  FILE........: qpsk_internal.h
+  AUTHORS.....: David Rowe & Steve Sampson
+  DATE CREATED: October 2020
+
+  A Library of functions that implement a QPSK modem
+
+\*---------------------------------------------------------------------------*/
+/*
+  Copyright (C) 2020 David Rowe
+
+  All rights reserved.
+
+  This program is free software; you can redistribute it and/or modify
+  it under the terms of the GNU Lesser General Public License version 2.1, as
+  published by the Free Software Foundation.  This program is
+  distributed in the hope that it will be useful, but WITHOUT ANY
+  WARRANTY; without even the implied warranty of MERCHANTABILITY or
+  FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
+  License for more details.
+
+  You should have received a copy of the GNU Lesser General Public License
+  along with this program; if not, see <http://www.gnu.org/licenses/>.
+ */
+
 #pragma once
 
 #ifdef __cplusplus
@@ -11,34 +37,33 @@ extern "C"
 #include <stdint.h>
 #include <math.h> 
 
-#define TX_FILENAME "/tmp/spectrum-filtered.raw"
-#define RX_FILENAME "/tmp/spectrum.raw"
-
-#define NTAPS           50
-
 /* manual/hard coded fine timing estimation for now */
 #define FINE_TIMING_OFFSET 3
 
 #define FS              8000.0f
 #define RS              1600.0f
-#define NS              8
 #define TS              (1.0f / RS)
 #define CYCLES          (int) (FS / RS)
 #define CENTER          1100.0f
 
+#define NS              8
 #define PILOT_SYMBOLS   33
 #define DATA_SYMBOLS    31
+#define FRAME_SYMBOLS   (DATA_SYMBOLS * NS)
 
 #define PILOT_SAMPLES   (PILOT_SYMBOLS * CYCLES)
 #define DATA_SAMPLES    (DATA_SYMBOLS * CYCLES * NS)
 #define FRAME_SIZE      1405
+
+// (DATA_SYMBOLS * 2 bits * NS)
+#define BITS_PER_FRAME  496
 
 #ifndef M_PI
 #define M_PI            3.14159265358979323846f
 #endif
 
 #define TAU             (2.0f * M_PI)
-#define ROTATE45        (M_PI / 4.0f)
+#define ROT45           (M_PI / 4.0f)
 
 /*
  * This method is much faster than using cexp()
@@ -62,18 +87,6 @@ typedef enum
     hunt,
     process
 } State;
-
-/* Prototypes */
-
-complex float qpsk_mod(int []);
-void qpsk_demod(complex float, int []);
-
-int bpsk_pilot_modulate(int16_t []);
-int qpsk_data_modulate(int16_t [], int [], int);
-
-int tx_frame(int16_t [], complex float [], int);
-
-void rx_frame(int16_t [], int [], FILE *);
 
 #ifdef __cplusplus
 }
