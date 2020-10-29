@@ -317,7 +317,6 @@ int tx_frame(int16_t samples[], complex float symbol[], int length) {
 
     /*
      * Now return the resulting real samples
-     * (imaginary part discarded)
      */
     for (int i = 0; i < (length * CYCLES); i++) {
         samples[i] = (int16_t) ((crealf(signal[i]) + cimagf(signal[i])) * 16384.0f); // @ .5
