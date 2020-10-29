@@ -290,7 +290,7 @@ int main(int argc, char *argv[]) {
         for (int i = 0; i < NS; i++) {
             // 31 QPSK 2-bit
 
-            length = qpsk_data_modulate(frame, bits, DATA_SYMBOLS * i);
+            length = qpsk_data_modulate(frame, bits, (DATA_SYMBOLS * i) * 2);
 
             fwrite(frame, sizeof (int16_t), length, fout);
         }
