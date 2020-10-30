@@ -46,7 +46,7 @@ int qpsk_get_number_of_pilot_bits(void);
 int qpsk_get_number_of_data_bits(void);
 
 void qpsk_rx_freq_shift(complex float [], complex float [], int, int, float, complex float);
-void qpsk_rx_frame(int16_t [], int []);
+void qpsk_rx_frame(int16_t [], uint8_t []);
 void qpsk_rx_end(void);
 
 #ifdef __cplusplus
