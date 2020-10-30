@@ -6,7 +6,7 @@ The design is driven by the FreeDV 2020 Specifications which were originally des
 
 1600 Baud QPSK or 2-bits per symbol is 3000 bit/sec. The pilots use BPSK for both coherency and in this modem can also be used for syncronization. One (1) frame of BPSK pilots/sync, and eight (8) frames of QPSK data.
 
-#### Development
+#### Development Directory
 Currently working on the low level code. The modulation/demodulation seems to work. Requires fine timing code.
 
 Changed the input/output to real part only PCM, as most radios are just single channel audio input. This results in a bit of smearing on scatter diagram.
@@ -17,3 +17,7 @@ Changed the input/output to real part only PCM, as most radios are just single c
 $ make test_scatter
 ```
 Then view `scatter.png`
+
+#### Modem Directory
+This is where the modem dynamic library is being developed
+
