@@ -31,6 +31,9 @@ extern "C"
 {
 #endif
 
+#include <complex.h>
+#include <stdint.h>
+
 // Prototypes
 
 int qpsk_create(void);
@@ -41,6 +44,10 @@ int qpsk_data_modulate(int16_t [], uint8_t [], int);
 
 int qpsk_get_number_of_pilot_bits(void);
 int qpsk_get_number_of_data_bits(void);
+
+void qpsk_rx_freq_shift(complex float [], complex float [], int, int, float, complex float);
+void qpsk_rx_frame(int16_t [], int []);
+void qpsk_rx_end(void);
 
 #ifdef __cplusplus
 }

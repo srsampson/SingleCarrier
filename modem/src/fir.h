@@ -40,5 +40,3 @@ void fir(complex float [], complex float [], int);
 #ifdef __cplusplus
 }
 #endif
-
-

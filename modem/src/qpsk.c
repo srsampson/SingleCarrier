@@ -38,7 +38,11 @@
 
 // Prototypes
 
+static float cnormf(complex float);
+static float correlate_pilots(complex float [], int);
+static float magnitude_pilots(complex float [], int);
 static complex float qpsk_mod(int []);
+static void qpsk_demod(complex float, int []);
 static int tx_frame(int16_t [], complex float [], int, bool);
 
 // Externals
@@ -48,15 +52,25 @@ extern const complex float constellation[];
 
 // Globals
 
+static State state;
+
 static bool dpsk_en = false;
 
 static complex float tx_filter[NTAPS];
+static complex float rx_filter[NTAPS];
+
+static complex float input_frame[(FRAME_SIZE * 2)];
+static complex float decimated_frame[562]; // (FRAME_SIZE / CYCLES) * 2
 static complex float pilot_table[PILOT_SYMBOLS];
-static int16_t frame[FRAME_SIZE];
-static uint8_t bits[BITS_PER_FRAME];
+static complex float rx_pilot[PILOT_SYMBOLS];
+
+// Separate phases for full duplex
 
 static complex float fbb_tx_phase;
 static complex float fbb_tx_rect;
+
+static complex float fbb_rx_phase;
+static complex float fbb_rx_rect;
 
 // Functions
 
@@ -73,11 +87,50 @@ int create_qpsk_modem() {
      * Initialize center frequency and phase
      */
     fbb_tx_phase = cmplx(0.0f);
+    fbb_rx_phase = cmplx(0.0f);
+
     fbb_tx_rect = cmplx(TAU * CENTER / FS);
+    fbb_rx_rect = cmplx(TAU * -CENTER / FS);
 }
 
 int destroy_qpsk_modem() {
     // TODO
+}
+
+/*
+ * For use when sqrt() is not needed
+ */
+static float cnormf(complex float val) {
+    float realf = crealf(val);
+    float imagf = cimagf(val);
+
+    return realf * realf + imagf * imagf;
+}
+
+/*
+ * Sliding Window
+ */
+static float correlate_pilots(complex float symbol[], int index) {
+    complex float out = 0.0f;
+
+    for (int i = 0, j = index; i < PILOT_SYMBOLS; i++, j++) {
+        out += (pilot_table[i] * symbol[j]);
+    }
+
+    return cnormf(out);
+}
+
+/*
+ * Return magnitude of symbols (sans sqrt)
+ */
+static float magnitude_pilots(complex float symbol[], int index) {
+    float out = 0.0f;
+
+    for (int i = index; i < (PILOT_SYMBOLS + index); i++) {
+        out += cnormf(symbol[i]);
+    }
+    
+    return out;
 }
 
 /*
@@ -93,6 +146,142 @@ int destroy_qpsk_modem() {
  */
 static complex float qpsk_mod(int bits[]) {
     return constellation[(bits[1] << 1) | bits[0]];
+}
+
+/*
+ * Gray coded QPSK demodulation function
+ *
+ *  Q 01   00 I
+ *     \ | /
+ *      \|/
+ *   ----+----
+ *      /|\
+ *     / | \
+ * -I 11   10 -Q
+ * 
+ * By transmitting I+Q at transmitter, the signal has a
+ * 45 degree shift, which is just what we need to find
+ * the quadrant the symbol is in.
+ * 
+ * Each bit pair differs from the next by only one bit.
+ */
+static void qpsk_demod(complex float symbol, int bits[]) {
+    bits[0] = crealf(symbol) < 0.0f; // I < 0 ?
+    bits[1] = cimagf(symbol) < 0.0f; // Q < 0 ?
+}
+
+/*
+ * Useful for operator offset of receiver fine tuning
+ */
+void qpsk_rx_freq_shift(complex float out[], complex float in[], int index,
+        int length, float fshift, complex float phase_rect) {
+
+    complex float foffset_rect = cmplx(TAU * fshift / FS);
+    
+    /*
+     * Use a copy of the receive data to leave it alone
+     * for other algorithms (Probably not needed).
+     */
+    complex float *copy = (complex float *) calloc(sizeof (complex float), length);
+
+    for (int i = index, j = 0; i < length; i++, j++) {
+        copy[j] = in[index];
+    }
+
+    for (int i = 0; i < length; i++) {
+        phase_rect *= foffset_rect;
+        out[i] = copy[i] * phase_rect;
+    }
+
+    free(copy);
+
+    phase_rect /= cabsf(phase_rect); // normalize as magnitude can drift
+}
+
+/*
+ * Receive function
+ * 
+ * Process a 1600 baud QPSK at 8000 samples/sec.
+ * 
+ * Each frame is made up of 33 Pilots and 31 x 8 Data symbols.
+ * This is (33 * 5) = 165 + (31 * 5 * 8) = 1240 or 1405 samples per packet
+ */
+void qpsk_rx_frame(int16_t in[], int bits[]) {
+    /*
+     * Convert input PCM to complex samples
+     * Translate to Baseband at an 8 kHz sample rate
+     */
+    for (int i = 0; i < FRAME_SIZE; i++) {
+        fbb_rx_phase *= fbb_rx_rect;
+        
+        complex float val = fbb_rx_phase * ((float) in[i] / 16384.0f);
+        
+        input_frame[i] = input_frame[FRAME_SIZE + i];
+        input_frame[FRAME_SIZE + i] = val;
+    }
+
+    fbb_rx_phase /= cabsf(fbb_rx_phase); // normalize as magnitude can drift
+
+    /*
+     * Raised Root Cosine Filter at Baseband
+     */
+    fir(rx_filter, input_frame, FRAME_SIZE);
+
+    /*
+     * Decimate by 5 to the 1600 symbol rate
+     */
+    for (int i = 0; i < (FRAME_SIZE / CYCLES); i++) {
+        decimated_frame[i] = decimated_frame[(FRAME_SIZE / CYCLES) + i];
+        decimated_frame[(FRAME_SIZE / CYCLES) + i] = input_frame[(i * CYCLES) + FINE_TIMING_OFFSET];
+    }
+
+    /* Hunting for the pilot preamble sequence */
+
+    float temp_value = 0.0f;
+    float max_value = 0.0f;
+    float mean = 0.0f;
+    int max_index = 0;
+
+    for (int i = 0; i < ((FRAME_SIZE / CYCLES) / 2); i++) {
+        temp_value = correlate_pilots(decimated_frame, i);
+
+        if (temp_value > max_value) {
+            max_value = temp_value;
+            max_index = i;
+        }
+    }
+
+    mean = magnitude_pilots(decimated_frame, max_index);
+
+    if (max_value > (mean * 30.0f)) {
+        for (int i = 0, j = max_index; j < (PILOT_SYMBOLS + max_index); i++, j++) {
+            /*
+             * Save the pilots for the coherent process
+             */
+            rx_pilot[i] = decimated_frame[j];
+        }
+        
+        /*
+         * Now process data symbols TODO
+         */
+        
+        state = process;
+        
+        // qpsk_demod();          // TODO
+        
+    } else {
+        /*
+         * Burn remainder of frame
+         */
+        state = hunt;
+    }
+}
+
+/*
+ * Dead man switch to state end
+ */
+void qpsk_rx_end() {
+    state = hunt;
 }
 
 /*
