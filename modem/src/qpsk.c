@@ -206,7 +206,7 @@ void qpsk_rx_freq_shift(complex float out[], complex float in[], int index,
  * Each frame is made up of 33 Pilots and 31 x 8 Data symbols.
  * This is (33 * 5) = 165 + (31 * 5 * 8) = 1240 or 1405 samples per packet
  */
-void qpsk_rx_frame(int16_t in[], int bits[]) {
+void qpsk_rx_frame(int16_t in[], uint8_t bits[]) {
     /*
      * Convert input PCM to complex samples
      * Translate to Baseband at an 8 kHz sample rate
