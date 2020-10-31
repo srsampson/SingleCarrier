@@ -73,8 +73,7 @@ static complex float fbb_rx_phase;
 static complex float fbb_rx_rect;
 
 static float rx_error;
-
-static int rx_timing;
+static float rx_timing;
 
 // Functions
 
@@ -210,15 +209,21 @@ void qpsk_rx_frame(int16_t in[], uint8_t bits[]) {
      * Decimate by 5 to the 1600 symbol rate
      */
     for (int i = 0; i < (FRAME_SIZE / CYCLES); i++) {
-        decimated_frame[i] = decimated_frame[(FRAME_SIZE / CYCLES) + i];
-        decimated_frame[(FRAME_SIZE / CYCLES) + i] = input_frame[(i * CYCLES) + rx_timing];
+        int extended = (FRAME_SIZE / CYCLES) + i;  // compute once
+        
+        decimated_frame[i] = decimated_frame[extended];
+        decimated_frame[extended] = input_frame[(i * CYCLES) + (int) roundf(rx_timing)];
 
         /*
          * Compute the QPSK phase error
+         * The BPSK parts will be bogus, but they are short
          */
-        float phase_error = cargf(cpowf(decimated_frame[(FRAME_SIZE / CYCLES) + i], 4.0f) * fourth); // division is slow
+        float phase_error = cargf(cpowf(decimated_frame[extended], 4.0f) * fourth); // division is slow
 
-        rx_timing = (int) roundf(fabsf(phase_error)); // only positive
+        /*
+         * Filter out the BPSK noise
+         */
+        rx_timing = .9f * rx_timing + .1f * fabsf(phase_error); // only positive
     }
 
     /* Hunting for the pilot preamble sequence */
