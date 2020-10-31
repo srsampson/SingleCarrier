@@ -74,6 +74,8 @@ static complex float fbb_rx_rect;
 
 static float rx_error;
 
+static int rx_timing;
+
 // Functions
 
 int create_qpsk_modem() {
@@ -93,6 +95,8 @@ int create_qpsk_modem() {
 
     fbb_tx_rect = cmplx(TAU * CENTER / FS);
     fbb_rx_rect = cmplx(TAU * -CENTER / FS);
+    
+    rx_timing = FINE_TIMING_OFFSET;
 }
 
 int destroy_qpsk_modem() {
@@ -181,7 +185,6 @@ static void qpsk_demod(complex float symbol, int bits[]) {
  */
 void qpsk_rx_frame(int16_t in[], uint8_t bits[]) {
     complex float fourth = (1.0f / 4.0f);
-    int timing_offset = FINE_TIMING_OFFSET; // use pre-computed estimate
 
     /*
      * Convert input PCM to complex samples
@@ -208,14 +211,14 @@ void qpsk_rx_frame(int16_t in[], uint8_t bits[]) {
      */
     for (int i = 0; i < (FRAME_SIZE / CYCLES); i++) {
         decimated_frame[i] = decimated_frame[(FRAME_SIZE / CYCLES) + i];
-        decimated_frame[(FRAME_SIZE / CYCLES) + i] = input_frame[(i * CYCLES) + timing_offset];
+        decimated_frame[(FRAME_SIZE / CYCLES) + i] = input_frame[(i * CYCLES) + rx_timing];
 
         /*
          * Compute the QPSK phase error
          */
         float phase_error = cargf(cpowf(decimated_frame[(FRAME_SIZE / CYCLES) + i], 4.0f) * fourth); // division is slow
 
-        timing_offset = (int) roundf(fabsf(phase_error)); // only positive
+        rx_timing = (int) roundf(fabsf(phase_error)); // only positive
     }
 
     /* Hunting for the pilot preamble sequence */
