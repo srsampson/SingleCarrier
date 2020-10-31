@@ -54,6 +54,8 @@ static complex float fbb_tx_rect;
 static complex float fbb_rx_phase;
 static complex float fbb_rx_rect;
 
+static complex float rx_frequency;
+
 #ifdef DEBUG
     int pilot_frames_detected = 0;
 #endif
@@ -158,7 +160,8 @@ static int find_quadrant(complex float symbol) {
  * This is (33 * 5) = 165 + (31 * 5 * 8) = 1240 or 1405 samples per packet
  */
 void rx_frame(int16_t in[], int bits[], FILE *fout) {
-    complex float val;
+    complex float fourth = (1.0f / 4.0f);
+    int timing_offset = FINE_TIMING_OFFSET;  // estimated
 
     /*
      * Convert input PCM to complex samples
@@ -167,10 +170,10 @@ void rx_frame(int16_t in[], int bits[], FILE *fout) {
     for (int i = 0; i < FRAME_SIZE; i++) {
         fbb_rx_phase *= fbb_rx_rect;
         
-        val = ((float) in[i] / 16384.0f) + 0.0f * I;
-        
+        complex float val = fbb_rx_phase * ((float) in[i] / 16384.0f);
+
         input_frame[i] = input_frame[FRAME_SIZE + i];
-        input_frame[FRAME_SIZE + i] = val * fbb_rx_phase;
+        input_frame[FRAME_SIZE + i] = val;
     }
 
     fbb_rx_phase /= cabsf(fbb_rx_phase); // normalize as magnitude can drift
@@ -185,7 +188,11 @@ void rx_frame(int16_t in[], int bits[], FILE *fout) {
      */
     for (int i = 0; i < (FRAME_SIZE / CYCLES); i++) {
         decimated_frame[i] = decimated_frame[(FRAME_SIZE / CYCLES) + i];
-        decimated_frame[(FRAME_SIZE / CYCLES) + i] = input_frame[(i * CYCLES) + FINE_TIMING_OFFSET];
+        decimated_frame[(FRAME_SIZE / CYCLES) + i] = input_frame[(i * CYCLES) + timing_offset];
+
+	rx_frequency = cpowf(decimated_frame[(FRAME_SIZE / CYCLES) + i], 4.0f) * fourth; // division is slow
+	timing_offset = (int) roundf(fabsf(cargf(rx_frequency))); // only positive
+
 #ifdef TEST_SCATTER
         fprintf(stderr, "%f %f\n", crealf(decimated_frame[(FRAME_SIZE / CYCLES) + i]), cimagf(decimated_frame[(FRAME_SIZE / CYCLES) + i]));
 #endif 
@@ -368,7 +375,7 @@ int main(int argc, char** argv) {
     fbb_tx_phase = cmplx(0.0f);
     fbb_tx_rect = cmplx(TAU * CENTER / FS);
 
-    for (int k = 0; k < 500; k++) {
+    for (int k = 0; k < 5001; k++) {
         // 33 BPSK pilots
         length = bpsk_pilot_modulate(frame);
 
