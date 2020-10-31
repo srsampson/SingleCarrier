@@ -41,7 +41,7 @@ extern "C"
 #define RX_FILENAME "/tmp/spectrum.raw"
 
 /* manual/hard coded fine timing estimation for now */
-#define FINE_TIMING_OFFSET 3
+#define FINE_TIMING_OFFSET 3.0f
 
 #define FS              8000.0f
 #define RS              1600.0f
