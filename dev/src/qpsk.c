@@ -375,7 +375,7 @@ int main(int argc, char** argv) {
     fbb_tx_phase = cmplx(0.0f);
     fbb_tx_rect = cmplx(TAU * CENTER / FS);
 
-    for (int k = 0; k < 5001; k++) {
+    for (int k = 0; k < 500; k++) {
         // 33 BPSK pilots
         length = bpsk_pilot_modulate(frame);
 
