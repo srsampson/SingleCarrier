@@ -54,7 +54,7 @@ static complex float fbb_tx_rect;
 static complex float fbb_rx_phase;
 static complex float fbb_rx_rect;
 
-static complex float rx_frequency;
+static complex float rx_timing = FINE_TIMING_OFFSET;  // estimated
 
 #ifdef DEBUG
     int pilot_frames_detected = 0;
@@ -161,7 +161,6 @@ static int find_quadrant(complex float symbol) {
  */
 void rx_frame(int16_t in[], int bits[], FILE *fout) {
     complex float fourth = (1.0f / 4.0f);
-    int timing_offset = FINE_TIMING_OFFSET;  // estimated
 
     /*
      * Convert input PCM to complex samples
@@ -187,14 +186,24 @@ void rx_frame(int16_t in[], int bits[], FILE *fout) {
      * Decimate by 5 to the 1600 symbol rate
      */
     for (int i = 0; i < (FRAME_SIZE / CYCLES); i++) {
-        decimated_frame[i] = decimated_frame[(FRAME_SIZE / CYCLES) + i];
-        decimated_frame[(FRAME_SIZE / CYCLES) + i] = input_frame[(i * CYCLES) + timing_offset];
+	int extended = (FRAME_SIZE / CYCLES) + i;  // compute once
 
-	rx_frequency = cpowf(decimated_frame[(FRAME_SIZE / CYCLES) + i], 4.0f) * fourth; // division is slow
-	timing_offset = (int) roundf(fabsf(cargf(rx_frequency))); // only positive
+        decimated_frame[i] = decimated_frame[extended];
+        decimated_frame[extended] = input_frame[(i * CYCLES) + (int) roundf(rx_timing)];
+
+        /*
+         * Compute the QPSK phase error
+         * The BPSK parts will be bogus, but they are short
+         */
+        float phase_error = cargf(cpowf(decimated_frame[extended], 4.0f) * fourth); // division is slow
+
+        /*
+         * Filter out the BPSK noise
+         */
+        rx_timing = .9f * rx_timing + .1f * fabsf(phase_error); // only positive
 
 #ifdef TEST_SCATTER
-        fprintf(stderr, "%f %f\n", crealf(decimated_frame[(FRAME_SIZE / CYCLES) + i]), cimagf(decimated_frame[(FRAME_SIZE / CYCLES) + i]));
+        fprintf(stderr, "%f %f\n", crealf(decimated_frame[extended]), cimagf(decimated_frame[extended]));
 #endif 
     }
 
