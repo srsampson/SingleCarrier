@@ -42,17 +42,12 @@ extern "C"
 
 #define FS              8000.0f
 #define RS              1600.0f
-#define TS              (1.0f / RS)
 #define CYCLES          (int) (FS / RS)
 #define CENTER          1100.0f
 
 #define NS              8
 #define PILOT_SYMBOLS   33
 #define DATA_SYMBOLS    31
-#define FRAME_SYMBOLS   (DATA_SYMBOLS * NS)
-
-#define PILOT_SAMPLES   (PILOT_SYMBOLS * CYCLES)
-#define DATA_SAMPLES    (DATA_SYMBOLS * CYCLES * NS)
 #define FRAME_SIZE      1405
 
 // (DATA_SYMBOLS * 2 bits * NS)
@@ -66,11 +61,11 @@ extern "C"
 #define ROT45           (M_PI / 4.0f)
 
 /*
- * This method is much faster than using cexp()
- * float_value - must be a float
+ * This method is much faster than using cexp() when real == 0
+ * value - must be a float
  */
-#define cmplx(float_value) (cosf(float_value) + sinf(float_value) * I)
-#define cmplxconj(float_value) (cosf(float_value) + sinf(float_value) * -I)
+#define cmplx(value) (cosf(value) + sinf(value) * I)
+#define cmplxconj(value) (cosf(value) + sinf(value) * -I)
 
 typedef struct
 {

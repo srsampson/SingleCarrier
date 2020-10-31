@@ -64,13 +64,15 @@ static complex float decimated_frame[562]; // (FRAME_SIZE / CYCLES) * 2
 static complex float pilot_table[PILOT_SYMBOLS];
 static complex float rx_pilot[PILOT_SYMBOLS];
 
-// Separate phases for full duplex
+// Separate phase references for full duplex
 
 static complex float fbb_tx_phase;
 static complex float fbb_tx_rect;
 
 static complex float fbb_rx_phase;
 static complex float fbb_rx_rect;
+
+static float rx_error;
 
 // Functions
 
@@ -169,35 +171,6 @@ static void qpsk_demod(complex float symbol, int bits[]) {
     bits[0] = crealf(symbol) < 0.0f; // I < 0 ?
     bits[1] = cimagf(symbol) < 0.0f; // Q < 0 ?
 }
-
-/*
- * Useful for operator offset of receiver fine tuning
- */
-void qpsk_rx_freq_shift(complex float out[], complex float in[], int index,
-        int length, float fshift, complex float phase_rect) {
-
-    complex float foffset_rect = cmplx(TAU * fshift / FS);
-    
-    /*
-     * Use a copy of the receive data to leave it alone
-     * for other algorithms (Probably not needed).
-     */
-    complex float *copy = (complex float *) calloc(sizeof (complex float), length);
-
-    for (int i = index, j = 0; i < length; i++, j++) {
-        copy[j] = in[index];
-    }
-
-    for (int i = 0; i < length; i++) {
-        phase_rect *= foffset_rect;
-        out[i] = copy[i] * phase_rect;
-    }
-
-    free(copy);
-
-    phase_rect /= cabsf(phase_rect); // normalize as magnitude can drift
-}
-
 /*
  * Receive function
  * 
@@ -207,15 +180,18 @@ void qpsk_rx_freq_shift(complex float out[], complex float in[], int index,
  * This is (33 * 5) = 165 + (31 * 5 * 8) = 1240 or 1405 samples per packet
  */
 void qpsk_rx_frame(int16_t in[], uint8_t bits[]) {
+    complex float fourth = (1.0f / 4.0f);
+    int timing_offset = FINE_TIMING_OFFSET; // use pre-computed estimate
+
     /*
      * Convert input PCM to complex samples
      * Translate to Baseband at an 8 kHz sample rate
      */
     for (int i = 0; i < FRAME_SIZE; i++) {
         fbb_rx_phase *= fbb_rx_rect;
-        
+
         complex float val = fbb_rx_phase * ((float) in[i] / 16384.0f);
-        
+
         input_frame[i] = input_frame[FRAME_SIZE + i];
         input_frame[FRAME_SIZE + i] = val;
     }
@@ -232,7 +208,14 @@ void qpsk_rx_frame(int16_t in[], uint8_t bits[]) {
      */
     for (int i = 0; i < (FRAME_SIZE / CYCLES); i++) {
         decimated_frame[i] = decimated_frame[(FRAME_SIZE / CYCLES) + i];
-        decimated_frame[(FRAME_SIZE / CYCLES) + i] = input_frame[(i * CYCLES) + FINE_TIMING_OFFSET];
+        decimated_frame[(FRAME_SIZE / CYCLES) + i] = input_frame[(i * CYCLES) + timing_offset];
+
+        /*
+         * Compute the QPSK phase error
+         */
+        float phase_error = cargf(cpowf(decimated_frame[(FRAME_SIZE / CYCLES) + i], 4.0f) * fourth); // division is slow
+
+        timing_offset = (int) roundf(fabsf(phase_error)); // only positive
     }
 
     /* Hunting for the pilot preamble sequence */
@@ -260,13 +243,13 @@ void qpsk_rx_frame(int16_t in[], uint8_t bits[]) {
              */
             rx_pilot[i] = decimated_frame[j];
         }
-        
+
         /*
          * Now process data symbols TODO
          */
         
         state = process;
-        
+
         // qpsk_demod();          // TODO
         
     } else {
@@ -275,6 +258,11 @@ void qpsk_rx_frame(int16_t in[], uint8_t bits[]) {
          */
         state = hunt;
     }
+}
+
+
+void qpsk_rx_offset(float fshift) {
+    fbb_rx_rect *= cmplx(TAU * fshift / FS);
 }
 
 /*
