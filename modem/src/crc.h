@@ -1,10 +1,10 @@
 /*---------------------------------------------------------------------------*\
 
-  FILE........: qpsk_codec2.h
+  FILE........: crc.h
   AUTHORS.....: David Rowe & Steve Sampson
   DATE CREATED: October 2020
 
-  A Dynamic Library include header for a QPSK modem
+  A Library of functions that implement a QPSK modem
 
 \*---------------------------------------------------------------------------*/
 /*
@@ -31,23 +31,22 @@ extern "C"
 {
 #endif
 
-#include <complex.h>
 #include <stdint.h>
 
-// Prototypes
+/*
+ * Initialize the CRC with 16-bit 0xffff value
+ */
+void resetCRC(void);
 
-int qpsk_create(void);
-int qpsk_destroy(void);
+/*
+ * Use the 8-bit byte to update the 16-bit CRC value
+ */
+void updateCRC(uint8_t);
 
-int qpsk_pilot_modulate(int16_t []);
-int qpsk_data_modulate(int16_t [], uint8_t [], int);
-
-int qpsk_get_number_of_pilot_bits(void);
-int qpsk_get_number_of_data_bits(void);
-
-void qpsk_rx_freq_shift(complex float [], complex float [], int, int, float, complex float);
-void qpsk_rx_frame(int16_t [], uint8_t []);
-void qpsk_rx_end(void);
+/*
+ * Return a copy of the current 16-bit CRC
+ */
+uint16_t getCRC(void);
 
 #ifdef __cplusplus
 }

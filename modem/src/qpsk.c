@@ -54,7 +54,7 @@ extern const complex float constellation[];
 
 static State state;
 
-static bool dpsk_en = false;
+static bool dpsk_en;
 
 static complex float tx_filter[NTAPS];
 static complex float rx_filter[NTAPS];
@@ -96,6 +96,10 @@ int create_qpsk_modem() {
     fbb_rx_rect = cmplx(TAU * -CENTER / FS);
     
     rx_timing = FINE_TIMING_OFFSET;
+    
+    state = hunt;
+    
+    dpsk_en = false;
 }
 
 int destroy_qpsk_modem() {
@@ -220,10 +224,7 @@ void qpsk_rx_frame(int16_t in[], uint8_t bits[]) {
          */
         float phase_error = cargf(cpowf(decimated_frame[extended], 4.0f) * fourth); // division is slow
 
-        /*
-         * Filter out the BPSK noise
-         */
-        rx_timing = .9f * rx_timing + .1f * fabsf(phase_error); // only positive
+        rx_timing = fabsf(phase_error); // only positive
     }
 
     /* Hunting for the pilot preamble sequence */
@@ -242,27 +243,41 @@ void qpsk_rx_frame(int16_t in[], uint8_t bits[]) {
         }
     }
 
+    /*
+     * Use the magnitude to create a decision point
+     */
     mean = magnitude_pilots(decimated_frame, max_index);
 
     if (max_value > (mean * 30.0f)) {
+
+        /*
+         * We probably have a decoded BPSK pilot frame at this point
+         */
         for (int i = 0, j = max_index; j < (PILOT_SYMBOLS + max_index); i++, j++) {
             /*
              * Save the pilots for the coherent process
              */
             rx_pilot[i] = decimated_frame[j];
         }
-
+        
         /*
-         * Now process data symbols TODO
+         * Declare process state
+         */
+        state = process;
+        
+        /*
+         * Now process the QPSK data frame symbols
          */
         
-        state = process;
+
 
         // qpsk_demod();          // TODO
         
     } else {
         /*
-         * Burn remainder of frame
+         * Burn the remainder of frame (total loss)
+         * 
+         * Declare hunt state
          */
         state = hunt;
     }
@@ -272,11 +287,13 @@ void qpsk_rx_frame(int16_t in[], uint8_t bits[]) {
 void qpsk_rx_offset(float fshift) {
     fbb_rx_rect *= cmplx(TAU * fshift / FS);
 }
-
 /*
  * Dead man switch to state end
  */
 void qpsk_rx_end() {
+    /*
+     * Declare hunt state
+     */
     state = hunt;
 }
 

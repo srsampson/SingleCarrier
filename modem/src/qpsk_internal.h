@@ -52,6 +52,16 @@ extern "C"
 
 // (DATA_SYMBOLS * 2 bits * NS)
 #define BITS_PER_FRAME  496
+    
+#define QUEUE_LENGTH           20
+#define MAX_PACKET_LENGTH      4096     // some big number
+    
+#define FEND                   0xC0
+#define FESC                   0xDB
+#define TFEND                  0xDC
+#define TFESC                  0xDD
+#define FFLAG                  0x7E
+#define FFESC                  0x7D
 
 #ifndef M_PI
 #define M_PI            3.14159265358979323846f
@@ -67,14 +77,6 @@ extern "C"
 #define cmplx(value) (cosf(value) + sinf(value) * I)
 #define cmplxconj(value) (cosf(value) + sinf(value) * -I)
 
-typedef struct
-{
-    int data;
-    int tx_symb;
-    float cost;
-    complex float rx_symb;
-} Rxed;
-
 /* modem state machine states */
 
 typedef enum
@@ -82,6 +84,61 @@ typedef enum
     hunt,
     process
 } State;
+
+/* Data block */
+
+typedef struct
+{
+    size_t length;
+    uint8_t *data;
+} DBlock;
+
+typedef struct
+{
+    complex float rx_symb;
+    float cost;
+    uint8_t data;
+    uint8_t tx_symb;
+} Rxed;
+
+typedef enum
+{
+    NEW_FRAME,
+    DATA,
+    ESCAPE
+} MdmState;
+
+typedef enum
+{
+    TRANSMIT,
+    RECEIVE
+} PttState;
+
+typedef enum
+{
+    RTS,
+    DTR
+} PttType;
+
+/* Modem Control Block, overall control of the system */
+
+typedef struct
+{
+    int fd; /* Sound descriptor */
+    int pd; // Pseudo TTY descriptor
+    int td; // PTT descriptor
+    int tx_sample_count;
+    int sample_rate;
+    int center_freq;
+    int duplex;
+    int tx_delay;
+    int tx_tail;
+
+    PttState ptt_state;
+    PttType ptt_type;
+
+    State rx_state;
+} MCB;
 
 #ifdef __cplusplus
 }

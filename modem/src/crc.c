@@ -1,10 +1,10 @@
 /*---------------------------------------------------------------------------*\
 
-  FILE........: qpsk_codec2.h
+  FILE........: crc.c
   AUTHORS.....: David Rowe & Steve Sampson
   DATE CREATED: October 2020
 
-  A Dynamic Library include header for a QPSK modem
+  A Library of functions that implement a QPSK modem
 
 \*---------------------------------------------------------------------------*/
 /*
@@ -24,31 +24,31 @@
   along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
-
-#ifdef __cplusplus
-extern "C"
-{
-#endif
-
-#include <complex.h>
 #include <stdint.h>
 
-// Prototypes
+#include "crc.h"
 
-int qpsk_create(void);
-int qpsk_destroy(void);
+static uint16_t crcSum;
 
-int qpsk_pilot_modulate(int16_t []);
-int qpsk_data_modulate(int16_t [], uint8_t [], int);
-
-int qpsk_get_number_of_pilot_bits(void);
-int qpsk_get_number_of_data_bits(void);
-
-void qpsk_rx_freq_shift(complex float [], complex float [], int, int, float, complex float);
-void qpsk_rx_frame(int16_t [], uint8_t []);
-void qpsk_rx_end(void);
-
-#ifdef __cplusplus
+/*
+ * Reset the 16-Bit CRC
+ */
+void resetCRC() {
+    crcSum = 0x0ffff;
 }
-#endif
+
+/*
+ * Update the 16-bit CRC
+ */
+void updateCRC(uint8_t data) {
+    uint8_t x = (crcSum >> 8) ^ data;
+    
+    x ^= (x >> 4);
+    
+    crcSum = (crcSum << 8) ^ ((uint16_t) (x << 12)) ^
+            ((uint16_t) (x << 5)) ^ ((uint16_t) x);
+}
+
+uint16_t getCRC() {
+    return crcSum;
+}
