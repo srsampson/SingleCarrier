@@ -215,15 +215,11 @@ void qpsk_rx_frame(int16_t in[], uint8_t bits[]) {
         decimated_frame[extended] = input_frame[(i * CYCLES) + (int) roundf(rx_timing)];
 
         /*
-         * Compute the QPSK phase error
-         * The BPSK parts will be bogus, but they are short
+         * Compute the phase error
          */
         float phase_error = cargf(cpowf(decimated_frame[extended], 4.0f) * fourth); // division is slow
 
-        /*
-         * Filter out the BPSK noise
-         */
-        rx_timing = .9f * rx_timing + .1f * fabsf(phase_error); // only positive
+        rx_timing = fabsf(phase_error); // only positive
     }
 
     /* Hunting for the pilot preamble sequence */
