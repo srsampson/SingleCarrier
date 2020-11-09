@@ -43,7 +43,7 @@ Queue *packet_queue;
 
 static MdmState n_state;
 
-static size_t quad_count;
+static size_t dibit_count;
 static size_t octet_count;
 
 static uint8_t packet[MAX_PACKET_LENGTH];
@@ -52,13 +52,13 @@ static uint8_t octet;
 // Functions
 
 /*
- * An 8-bit octet is made-up of two 4-bit quad
+ * An 8-bit octet is made-up of four dibits
  */
 void packet_create() {
     packet_queue = create_fifo(QUEUE_LENGTH);
     
     if (packet_queue == (Queue *) NULL) {
-        fprintf(stderr, "Fatal: init_rx_quad Unable to create Packet Queue\n");
+        fprintf(stderr, "Fatal: packet_create Unable to create Packet Queue\n");
         exit(-1);
     }
 }
@@ -68,8 +68,9 @@ void packet_destroy() {
 }
 
 void packet_reset() {
-    quad_count = 0;
+    dibit_count = 0;
     octet_count = 0;
+    octet = 0;
     
     n_state = NEW_FRAME;    
 }
@@ -96,54 +97,68 @@ DBlock *packet_pop() {
     return pop_fifo(packet_queue);
 }
 
-void packet_quad_push(uint8_t quad) {
-    quad_count++;
+/*
+ * Add in QPSK dibits from modem receiver
+ * until we get an octet worth.
+ * 
+ * You will need to fill short packets with zero
+ */
+void packet_dibit_push(uint8_t dibit) {
+    dibit_count++;
 
-    if ((quad_count % 2) == 0) {
-        octet = (quad << 4);      // MSQ
-    } else {
-        octet |= quad;            // LSQ
+    switch (dibit_count) {
+        case 1:
+            octet = dibit;
+            break;
+        case 2:
+        case 3:
+            octet = (octet << 2) | dibit;
+            break;
+        case 4:
+            octet = (octet << 2) | dibit;
 
-        switch (n_state) {
-            case NEW_FRAME:
-                if (octet == FFLAG) {
-                    octet_count = 0;
-                    quad_count = 0;
-                    resetCRC();
-                    n_state = DATA;
-                }
-                break;
-            case DATA:
-                if (octet == FFLAG) {
-                    if ((getCRC() == 0) && (octet_count > 2)) {
-                        /* Good frame */
-                        
-                        packet_push(octet_count - 2);
+            switch (n_state) {
+                case NEW_FRAME:
+                    if (octet == FFLAG) {
+                        octet_count = 0;
+                        dibit_count = 0;
+                        octet = 0;
+
+                        resetCRC();
+                        n_state = DATA;
                     }
-                    n_state = NEW_FRAME;
-                } else if (octet == FFESC) {
-                    /* Throw octet away */
-                    n_state = ESCAPE;
-                } else {
+                    break;
+                case DATA:
+                    if (octet == FFLAG) {
+                        if ((getCRC() == 0) && (octet_count > 2)) {
+                            /* Good frame */
+
+                            packet_push(octet_count - 2);
+                        }
+                        n_state = NEW_FRAME;
+                    } else if (octet == FFESC) {
+                        /* Throw octet away */
+                        n_state = ESCAPE;
+                    } else {
+                        // TODO Over-runs are not handled yet
+                        if (octet_count < MAX_PACKET_LENGTH - 1) {
+                            updateCRC(octet);
+                            packet[octet_count++] = octet;
+                            dibit_count = 0;
+                        }
+                    }
+                    break;
+                case ESCAPE:
                     // TODO Over-runs are not handled yet
                     if (octet_count < MAX_PACKET_LENGTH - 1) {
+                        octet = octet ^ 0x20;
                         updateCRC(octet);
                         packet[octet_count++] = octet;
-                        quad_count = 0;
+                        dibit_count = 0;
                     }
-                }
-                break;
-            case ESCAPE:
-                // TODO Over-runs are not handled yet
-                if (octet_count < MAX_PACKET_LENGTH - 1) {
-                    octet = octet ^ 0x20;
-                    updateCRC(octet);
-                    packet[octet_count++] = octet;
-                    quad_count = 0;
-                }
-                n_state = DATA;
-            default:
-                break;
-        }
+                    n_state = DATA;
+                default:
+                    break;
+            }
     }
 }

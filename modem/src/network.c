@@ -132,7 +132,7 @@ void pseudo_poll() {
     int status;
 
     while (1) {
-        /* read the octet from Non-Blocking pseudo TTY */
+        /* read the octet from Blocking pseudo TTY */
         status = read(mcb.pd, &octet, 1);
         
         /*
@@ -219,6 +219,7 @@ void pseudo_poll() {
 
 /*
  * Returns Data Block containing network KISS data
+ * to be sent to the modem transmitter
  */
 DBlock *pseudo_listen() {
     return pop_fifo(pseudo_queue);

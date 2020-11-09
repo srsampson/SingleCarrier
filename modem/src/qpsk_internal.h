@@ -55,7 +55,8 @@ extern "C"
     
 #define QUEUE_LENGTH           20
 #define MAX_PACKET_LENGTH      4096     // some big number
-    
+#define MAX_NR_TX_SAMPLES      100000
+
 #define FEND                   0xC0
 #define FESC                   0xDB
 #define TFEND                  0xDC
@@ -139,6 +140,36 @@ typedef struct
 
     State rx_state;
 } MCB;
+
+// Prototypes
+
+void reset_tx_scrambler(void);
+void reset_rx_scrambler(void);
+uint8_t tx_scramble(uint8_t);
+uint8_t rx_descramble(uint8_t);
+
+void packet_reset(void);
+void packet_dibit_push(uint8_t);
+DBlock *packet_pop(void);
+void packet_create(void);
+void packet_destroy(void);
+
+DBlock *pseudo_listen(void);
+int pseudo_create(void);
+void pseudo_destroy(void);
+void pseudo_poll(void);
+void pseudo_write_kiss_control(uint8_t [], size_t);
+void pseudo_write_kiss_data(uint8_t [], size_t);
+
+void ptt_transmit(void);
+void ptt_receive(void);
+void ptt_poll(void);
+
+void end_of_rx_frame(void);
+int16_t receive_frame(void);
+int16_t getAudioPeak(void);
+
+void intHandler(int);
 
 #ifdef __cplusplus
 }

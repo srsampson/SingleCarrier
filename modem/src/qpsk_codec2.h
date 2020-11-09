@@ -41,6 +41,7 @@ int qpsk_destroy(void);
 
 int qpsk_pilot_modulate(int16_t []);
 int qpsk_data_modulate(int16_t [], uint8_t [], int);
+int qpsk_raw_modulate(uint8_t);
 
 int qpsk_get_number_of_pilot_bits(void);
 int qpsk_get_number_of_data_bits(void);
