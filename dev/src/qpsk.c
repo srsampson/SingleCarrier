@@ -21,7 +21,6 @@
 // Prototypes
 
 static float cnormf(complex float);
-static int find_quadrant(complex float);
 static void freq_shift(complex float [], complex float [], int, int, float, complex float);
 static float correlate_pilots(complex float [], int);
 static float magnitude_pilots(complex float [], int);
@@ -123,34 +122,6 @@ static void freq_shift(complex float out[], complex float in[], int index,
     phase_rect /= cabsf(phase_rect); // normalize as magnitude can drift
 }
 
-static int find_quadrant(complex float symbol) {
-    float quadrant;
-
-    /*
-     * The smallest distance between constellation
-     * and the symbol, is our gray coded quadrant.
-     * 
-     *      1
-     *      |
-     *  3---+---0
-     *      |
-     *      2
-     */
-
-    float min_value = 200.0f; // some large value
-
-    for (int i = 0; i < 4; i++) {
-        float dist = cnormf(symbol - constellation[i]);
-
-        if (dist < min_value) {
-            min_value = dist;
-            quadrant = i;
-        }
-    }
-
-    return quadrant;
-}
-
 /*
  * Receive function
  * 
@@ -192,15 +163,11 @@ void rx_frame(int16_t in[], int bits[], FILE *fout) {
         decimated_frame[extended] = input_frame[(i * CYCLES) + (int) roundf(rx_timing)];
 
         /*
-         * Compute the QPSK phase error
-         * The BPSK parts will be bogus, but they are short
+         * Compute the phase error
          */
         float phase_error = cargf(cpowf(decimated_frame[extended], 4.0f) * fourth); // division is slow
 
-        /*
-         * Filter out the BPSK noise
-         */
-        rx_timing = .9f * rx_timing + .1f * fabsf(phase_error); // only positive
+        rx_timing = fabsf(phase_error); // only positive
 
 #ifdef TEST_SCATTER
         fprintf(stderr, "%f %f\n", crealf(decimated_frame[extended]), cimagf(decimated_frame[extended]));
