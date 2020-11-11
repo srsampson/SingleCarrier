@@ -117,7 +117,7 @@ int create_qpsk_modem() {
     
     rx_timing = FINE_TIMING_OFFSET;
     
-    state = hunt;
+    state = HUNT;
     
     dpsk_en = false;
     
@@ -278,7 +278,7 @@ static void qpsk_demod(complex float symbol, int bits[]) {
  * 
  * Process a 1600 baud QPSK at 8000 samples/sec.
  * 
- * Each frame is made up of 33 Pilots and 31 x 8 Data symbols.
+ * Each voice frame is made up of 33 Pilots and 31 x 8 Data symbols.
  * This is (33 * 5) = 165 + (31 * 5 * 8) = 1240 or 1405 samples per packet
  */
 void qpsk_rx_frame(int16_t in[], uint8_t bits[]) {
@@ -358,7 +358,7 @@ void qpsk_rx_frame(int16_t in[], uint8_t bits[]) {
         /*
          * Declare process state
          */
-        state = process;
+        state = PROCESS;
         
         /*
          * Now process the QPSK data frame symbols
@@ -374,7 +374,7 @@ void qpsk_rx_frame(int16_t in[], uint8_t bits[]) {
          * 
          * Declare hunt state
          */
-        state = hunt;
+        state = HUNT;
     }
 }
 
@@ -389,7 +389,7 @@ void qpsk_rx_end() {
     /*
      * Declare hunt state
      */
-    state = hunt;
+    state = HUNT;
 }
 
 /*
