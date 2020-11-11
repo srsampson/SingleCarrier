@@ -50,7 +50,7 @@ static float correlate_pilots(complex float [], int);
 static float magnitude_pilots(complex float [], int);
 static complex float qpsk_mod(int []);
 static void qpsk_demod(complex float, int []);
-static int tx_frame(int16_t [], complex float [], int, bool);
+static int tx_frame(int16_t [], complex float [], int);
 static void tx_symbol(complex float);
 static void modem_tx(void);
 static void network_send(void);
