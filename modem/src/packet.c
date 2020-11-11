@@ -100,8 +100,6 @@ DBlock *packet_pop() {
 /*
  * Add in QPSK dibits from modem receiver
  * until we get an octet worth.
- * 
- * You will need to fill short packets with zero
  */
 void packet_dibit_push(uint8_t dibit) {
     dibit_count++;
@@ -115,15 +113,19 @@ void packet_dibit_push(uint8_t dibit) {
             octet = (octet << 2) | dibit;
             break;
         case 4:
+            /*
+             * OK, with 4th dibit, we have an octet to process
+             */
             octet = (octet << 2) | dibit;
 
+            /*
+             * Process depending on state
+             */
             switch (n_state) {
                 case NEW_FRAME:
                     if (octet == FFLAG) {
                         octet_count = 0;
                         dibit_count = 0;
-                        octet = 0;
-
                         resetCRC();
                         n_state = DATA;
                     }
@@ -140,7 +142,7 @@ void packet_dibit_push(uint8_t dibit) {
                         /* Throw octet away */
                         n_state = ESCAPE;
                     } else {
-                        // TODO Over-runs are not handled yet
+                        // TODO MAX Over-runs are not handled yet
                         if (octet_count < MAX_PACKET_LENGTH - 1) {
                             updateCRC(octet);
                             packet[octet_count++] = octet;
@@ -149,16 +151,15 @@ void packet_dibit_push(uint8_t dibit) {
                     }
                     break;
                 case ESCAPE:
-                    // TODO Over-runs are not handled yet
+                    // TODO MAX Over-runs are not handled yet
                     if (octet_count < MAX_PACKET_LENGTH - 1) {
                         octet = octet ^ 0x20;
                         updateCRC(octet);
                         packet[octet_count++] = octet;
                         dibit_count = 0;
                     }
+                    
                     n_state = DATA;
-                default:
-                    break;
             }
     }
 }
