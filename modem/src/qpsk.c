@@ -399,14 +399,14 @@ void qpsk_rx_end() {
  * 
  * These can be either a Pilot or Data Frame
  */
-static int tx_frame(int16_t frame[], complex float symbol[], int length, bool dpsk) {
+static int tx_frame(int16_t frame[], complex float symbol[], int length) {
     complex float signal[(length * CYCLES)];
 
     /*
      * Build the 1600 baud packet Frame zero padding
      * for the desired 8 kHz sample rate.
      */
-    if (dpsk == true) {
+    if (dpsk_en == true) {
         //TODO
         for (int i = 0; i < length; i++) {
             signal[(i * CYCLES)] = symbol[i];
@@ -505,7 +505,7 @@ int qpsk_get_number_of_data_bits() {
  * The modulation data is assumed to be fixed pilot bits
  */
 int qpsk_pilot_modulate(int16_t frame[]) {
-    return tx_frame(frame, pilot_table, PILOT_SYMBOLS, false);
+    return tx_frame(frame, pilot_table, PILOT_SYMBOLS);
 }
 
 /*
@@ -524,7 +524,7 @@ int qpsk_data_modulate(int16_t frame[], uint8_t bits[], int index) {
         symbol[i] = qpsk_mod(dibit);
     }
 
-    return tx_frame(frame, symbol, DATA_SYMBOLS, dpsk_en);
+    return tx_frame(frame, symbol, DATA_SYMBOLS);
 }
 /*
  * Send raw pilots
