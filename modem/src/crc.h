@@ -1,6 +1,6 @@
 /*---------------------------------------------------------------------------*\
 
-  FILE........: qpsk_internal.h
+  FILE........: crc.h
   AUTHORS.....: David Rowe & Steve Sampson
   DATE CREATED: October 2020
 
@@ -31,57 +31,22 @@ extern "C"
 {
 #endif
 
-#include <stdio.h>
-#include <complex.h>
-#include <stdbool.h>
 #include <stdint.h>
-#include <math.h> 
-
-/* manual/hard coded fine timing estimation for now */
-#define FINE_TIMING_OFFSET 3.0f
-
-#define FS              8000.0f
-#define RS              1600.0f
-#define CYCLES          (int) (FS / RS)
-#define CENTER          1100.0f
-
-#define NS              8
-#define PILOT_SYMBOLS   33
-#define DATA_SYMBOLS    31
-#define FRAME_SIZE      1405
-
-// (DATA_SYMBOLS * 2 bits * NS)
-#define BITS_PER_FRAME  496
-
-#ifndef M_PI
-#define M_PI            3.14159265358979323846f
-#endif
-
-#define TAU             (2.0f * M_PI)
-#define ROT45           (M_PI / 4.0f)
 
 /*
- * This method is much faster than using cexp() when real == 0
- * value - must be a float
+ * Initialize the CRC with 16-bit 0xffff value
  */
-#define cmplx(value) (cosf(value) + sinf(value) * I)
-#define cmplxconj(value) (cosf(value) + sinf(value) * -I)
+void resetCRC(void);
 
-typedef struct
-{
-    int data;
-    int tx_symb;
-    float cost;
-    complex float rx_symb;
-} Rxed;
+/*
+ * Use the 8-bit byte to update the 16-bit CRC value
+ */
+void updateCRC(uint8_t);
 
-/* modem state machine states */
-
-typedef enum
-{
-    hunt,
-    process
-} State;
+/*
+ * Return a copy of the current 16-bit CRC
+ */
+uint16_t getCRC(void);
 
 #ifdef __cplusplus
 }

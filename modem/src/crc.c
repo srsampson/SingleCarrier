@@ -1,10 +1,10 @@
 /*---------------------------------------------------------------------------*\
 
-  FILE........: fir.h
+  FILE........: crc.c
   AUTHORS.....: David Rowe & Steve Sampson
   DATE CREATED: October 2020
 
-  A FIR filter used in the QPSK modem
+  A Library of functions that implement a QPSK modem
 
 \*---------------------------------------------------------------------------*/
 /*
@@ -24,19 +24,31 @@
   along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#pragma once
+#include <stdint.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+#include "crc.h"
 
-#include <complex.h>
+static uint16_t crcSum;
 
-#define NTAPS           49
-#define GAIN            2.2f
-
-void fir(complex float [], complex float [], int);
-
-#ifdef __cplusplus
+/*
+ * Reset the 16-Bit CRC
+ */
+void resetCRC() {
+    crcSum = 0x0ffff;
 }
-#endif
+
+/*
+ * Update the 16-bit CRC
+ */
+void updateCRC(uint8_t data) {
+    uint8_t x = (crcSum >> 8) ^ data;
+    
+    x ^= (x >> 4);
+    
+    crcSum = (crcSum << 8) ^ ((uint16_t) (x << 12)) ^
+            ((uint16_t) (x << 5)) ^ ((uint16_t) x);
+}
+
+uint16_t getCRC() {
+    return crcSum;
+}

@@ -24,7 +24,7 @@
   along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "qpsk_internal.h"
+#include "qpsk.h"
 #include "fir.h"
 
 // Externals

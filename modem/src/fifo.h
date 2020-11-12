@@ -1,10 +1,10 @@
 /*---------------------------------------------------------------------------*\
 
-  FILE........: qpsk_codec2.h
+  FILE........: fifo.h
   AUTHORS.....: David Rowe & Steve Sampson
   DATE CREATED: October 2020
 
-  A Dynamic Library include header for a QPSK modem
+  A Library of functions that implement a QPSK modem
 
 \*---------------------------------------------------------------------------*/
 /*
@@ -31,23 +31,34 @@ extern "C"
 {
 #endif
 
-#include <complex.h>
 #include <stdint.h>
+#include "qpsk.h"
 
-// Prototypes
+/* Queue control block and associated values */
 
-int qpsk_create(void);
-int qpsk_destroy(void);
+typedef enum
+{
+    FIFO_EMPTY,
+    FIFO_FULL
+} Queue_status;
 
-int qpsk_pilot_modulate(int16_t []);
-int qpsk_data_modulate(int16_t [], uint8_t [], int);
+typedef struct
+{
+    int head_pointer;
+    int tail_pointer;
 
-int qpsk_get_number_of_pilot_bits(void);
-int qpsk_get_number_of_data_bits(void);
+    size_t length; /* Number of items on the queue    */
+    size_t max_length; /* Maximum offset into queue array */
 
-void qpsk_rx_freq_shift(complex float [], complex float [], int, int, float, complex float);
-void qpsk_rx_frame(int16_t [], uint8_t []);
-void qpsk_rx_end(void);
+    Queue_status state;
+    
+    DBlock **queue;
+} Queue;
+
+void delete_fifo(Queue *);
+void push_fifo(Queue *, DBlock [], int);
+DBlock *pop_fifo(Queue *);
+Queue *create_fifo(size_t);
 
 #ifdef __cplusplus
 }
