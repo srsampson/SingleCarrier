@@ -30,6 +30,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <signal.h>
 #include <complex.h>
 #include <string.h>
 #include <fcntl.h>
@@ -37,7 +38,7 @@
 #include <unistd.h>
 #include <linux/soundcard.h>
 
-#include "qpsk_internal.h"
+#include "qpsk.h"
 #include "scramble.h"
 #include "fir.h"
 #include "fifo.h"
@@ -51,6 +52,7 @@ static float magnitude_pilots(complex float [], int);
 static complex float qpsk_mod(int []);
 static void qpsk_demod(complex float, int []);
 static int tx_frame(int16_t [], complex float [], int);
+static void tx_packet(DBlock **, int);
 static void tx_symbol(complex float);
 static void modem_tx(void);
 static void network_send(void);
@@ -60,14 +62,19 @@ static void network_send(void);
 extern const int8_t pilotvalues[];
 extern const complex float constellation[];
 
-extern Queue *pseudo_queue;
-extern Queue *packet_queue;
+extern Queue *pseudo_queue;     // PTY Pseudo-Terminal
+extern Queue *packet_queue;     // AX.25 Packet queue
+
+// Globals
+
+MCB mcb;
 
 // Locals
 
 static State state;
 
 static bool dpsk_en;
+static bool running;
 
 static complex float tx_filter[NTAPS];
 static complex float rx_filter[NTAPS];
@@ -77,6 +84,8 @@ static complex float pilot_table[PILOT_SYMBOLS];
 static complex float rx_pilot[PILOT_SYMBOLS];
 
 static int16_t tx_samples[MAX_NR_TX_SAMPLES];
+
+DBlock *inblock[QUEUE_LENGTH];
 
 // Separate phase references for full duplex
 
@@ -89,15 +98,37 @@ static complex float fbb_rx_rect;
 static float rx_error;
 static float rx_timing;
 
-static size_t sample_count; // count of 16-bit PCM samples
-
-static int dsp;
+static int16_t peak;        // peak value PCM samples
 
 // Functions
 
-int create_qpsk_modem() {
+/*
+ * Ctrl-C Interrupt
+ */
+void intHandler(int d) {
+    running = false;
+    printf("\nShutting Down...\n");
+}
+
+int main(int argc, char **argv) {
     int arg, status;
-    
+
+    /*
+     * Create the  Pseudo-Terminal interface
+     * pseudo_queue will be created
+     */
+    if (pseudo_create() == -1) {
+        return -1;
+    }
+
+    /*
+     * Create AX.25 packet interface
+     * packet_queue will be created
+     */
+    if (packet_create() == -1) {
+        return -1;
+    }
+
     /*
      * Create a complex table of pilot values
      * for the correlation algorithm
@@ -114,91 +145,159 @@ int create_qpsk_modem() {
 
     fbb_tx_rect = cmplx(TAU * CENTER / FS);
     fbb_rx_rect = cmplx(TAU * -CENTER / FS);
-    
+
     rx_timing = FINE_TIMING_OFFSET;
-    
+
     state = HUNT;
-    
+
     dpsk_en = false;
-    
-    dsp = open("/dev/dsp", O_RDWR);
-    
-    if (dsp != -1) {
+
+    /* Modern linux must install sudo apt-get install osspd
+     * to get access to /dev/dsp and execute this modem by using
+     * the padsp shell:
+     *
+     * $ padsp ./qpsk
+     */
+    mcb.fd = open("/dev/dsp", O_RDWR);
+
+    if (mcb.fd != -1) {
         // Bug: in ioctl you must set write parameter first
-        
+
         arg = 16;
-        status = ioctl(dsp, SOUND_PCM_WRITE_BITS, &arg);
-        
+        status = ioctl(mcb.fd, SOUND_PCM_WRITE_BITS, &arg);
+
         if (status == -1)
             fprintf(stderr, "Can't set write sample size\n");
         else
             fprintf(stderr, "Sound write sample size %d\n", arg);
 
         arg = 16;
-        status = ioctl(dsp, SOUND_PCM_READ_BITS, &arg);
-        
+        status = ioctl(mcb.fd, SOUND_PCM_READ_BITS, &arg);
+
         if (status == -1)
             fprintf(stderr, "Can't set read sample size\n");
         else
             fprintf(stderr, "Sound read sample size %d\n", arg);
 
         arg = 1;
-        status = ioctl(dsp, SOUND_PCM_WRITE_CHANNELS, &arg);
-        
+        status = ioctl(mcb.fd, SOUND_PCM_WRITE_CHANNELS, &arg);
+
         if (status == -1)
             fprintf(stderr, "Can't set number of write channels\n");
         else
             fprintf(stderr, "Number of write channels %d\n", arg);
 
         arg = 1;
-        status = ioctl(dsp, SOUND_PCM_READ_CHANNELS, &arg);
-        
+        status = ioctl(mcb.fd, SOUND_PCM_READ_CHANNELS, &arg);
+
         if (status == -1)
             fprintf(stderr, "Can't set number of read channels\n");
         else
             fprintf(stderr, "Number of read channels %d\n", arg);
 
         arg = FS;
-        status = ioctl(dsp, SOUND_PCM_WRITE_RATE, &arg);
-        
+        status = ioctl(mcb.fd, SOUND_PCM_WRITE_RATE, &arg);
+
         if (status == -1)
             fprintf(stderr, "Can't Set write sample rate\n");
         else
             fprintf(stderr, "Write sample rate %d\n", arg);
 
         arg = FS;
-        status = ioctl(dsp, SOUND_PCM_READ_RATE, &arg);
-        
+        status = ioctl(mcb.fd, SOUND_PCM_READ_RATE, &arg);
+
         if (status == -1)
             fprintf(stderr, "Can't Set read sample rate\n");
         else
             fprintf(stderr, "Read sample rate %d\n", arg);
-        
-        status = ioctl(dsp, SNDCTL_DSP_SETDUPLEX, 0);
-        
+
+        status = ioctl(mcb.fd, SNDCTL_DSP_SETDUPLEX, 0);
+
         if (status == -1)
             fprintf(stderr, "Can't Set Full Duplex\n");
         else
             fprintf(stderr, "Full duplex settable\n");
-        
-        ioctl(dsp, SNDCTL_DSP_GETCAPS, &arg);
+
+        ioctl(mcb.fd, SNDCTL_DSP_GETCAPS, &arg);
 
         if ((arg & DSP_CAP_DUPLEX) == 0)
             fprintf(stderr, "Can't Set Full Duplex capability\n");
         else
             fprintf(stderr, "Full duplex capability %d\n", ((arg & DSP_CAP_DUPLEX) == DSP_CAP_DUPLEX) ? 1 : 0);
     } else {
-        fprintf(stderr, "Unable to open /dev/dsp %d\n", dsp);
+        fprintf(stderr, "Unable to open /dev/dsp %d\n", mcb.fd);
         return -1;
     }
+
+    signal(SIGINT, intHandler); /* Exit gracefully */
+    running = true;
+
+    int loop = 0;
+    
+    /*
+     * loop forever
+     */
+    while (running == true) {
+        /*
+         * Check for any AX.25 KISS network input data
+         */
+        pseudo_poll();
+        
+        if (state == HUNT) {
+            if ((inblock[loop++] = (DBlock *) pseudo_listen()) != NULL) {
+
+                while ((inblock[loop] = pseudo_listen()) != NULL)
+                    loop++;
+
+                tx_packet(inblock, loop);
+
+                /*
+                 * Send it using modem
+                 */
+                write(mcb.fd, tx_samples, mcb.sample_count); // int16_t count
+            }
+            
+            loop = 0;
+        }
+
+        /*
+         * Check the modem for input data
+         */
+
+        peak = receive_frame();
+        
+        /*
+         * Now process any QAM decoded modem input data
+         */
+        while (packet_queue->state != FIFO_EMPTY) {
+            DBlock *dblock = packet_pop();
+
+            /*
+             * Send packets to the AX.25 KISS network
+             */
+            pseudo_write_kiss_data(dblock->data, dblock->length);
+        }
+
+        /*
+         * Check that the DSP transmit is done
+         */
+        //ptt_poll();
+    }
+
+    packet_destroy();
+    pseudo_destroy();
+
+    close(mcb.fd); // Sound descriptor
+    close(mcb.pd); // Pseudo TTY descriptor
+    close(mcb.td); // PTT descriptor
     
     return 0;
 }
 
-int destroy_qpsk_modem() {
-    packet_destroy();
-    pseudo_destroy();
-    close(dsp);
+// Functions
+
+int16_t getAudioPeak() {
+    return peak;
 }
 
 /*
@@ -233,19 +332,19 @@ static float magnitude_pilots(complex float symbol[], int index) {
     for (int i = index; i < (PILOT_SYMBOLS + index); i++) {
         out += cnormf(symbol[i]);
     }
-    
+
     return out;
 }
 
 /*
  * Gray coded QPSK modulation function
- * 
+ *
  *      Q
  *      |
  * -I---+---I
  *      |
  *     -Q
- * 
+ *
  * The symbols are not rotated on transmit
  */
 static complex float qpsk_mod(int bits[]) {
@@ -262,11 +361,11 @@ static complex float qpsk_mod(int bits[]) {
  *      /|\
  *     / | \
  * -I 11   10 -Q
- * 
+ *
  * By transmitting I+Q at transmitter, the signal has a
  * 45 degree shift, which is just what we need to find
  * the quadrant the symbol is in.
- * 
+ *
  * Each bit pair differs from the next by only one bit.
  */
 static void qpsk_demod(complex float symbol, int bits[]) {
@@ -275,9 +374,9 @@ static void qpsk_demod(complex float symbol, int bits[]) {
 }
 /*
  * Receive function
- * 
+ *
  * Process a 1600 baud QPSK at 8000 samples/sec.
- * 
+ *
  * Each voice frame is made up of 33 Pilots and 31 x 8 Data symbols.
  * This is (33 * 5) = 165 + (31 * 5 * 8) = 1240 or 1405 samples per packet
  */
@@ -309,7 +408,7 @@ void qpsk_rx_frame(int16_t in[], uint8_t bits[]) {
      */
     for (int i = 0; i < (FRAME_SIZE / CYCLES); i++) {
         int extended = (FRAME_SIZE / CYCLES) + i;  // compute once
-        
+
         decimated_frame[i] = decimated_frame[extended];
         decimated_frame[extended] = input_frame[(i * CYCLES) + (int) roundf(rx_timing)];
 
@@ -354,24 +453,24 @@ void qpsk_rx_frame(int16_t in[], uint8_t bits[]) {
              */
             rx_pilot[i] = decimated_frame[j];
         }
-        
+
         /*
          * Declare process state
          */
         state = PROCESS;
-        
+
         /*
          * Now process the QPSK data frame symbols
          */
-        
+
 
 
         // qpsk_demod();          // TODO
-        
+
     } else {
         /*
          * Burn the remainder of frame (total loss)
-         * 
+         *
          * Declare hunt state
          */
         state = HUNT;
@@ -396,7 +495,7 @@ void qpsk_rx_end() {
  * Modulate the symbols by first upsampling to 8 kHz sample rate,
  * and translating the spectrum to 1100 Hz, where it is filtered
  * using the root raised cosine coefficients.
- * 
+ *
  * These can be either a Pilot or Data Frame
  */
 static int tx_frame(int16_t frame[], complex float symbol[], int length) {
@@ -424,7 +523,7 @@ static int tx_frame(int16_t frame[], complex float symbol[], int length) {
             }
         }
     }
-    
+
     /*
      * Root Cosine Filter at Baseband
      */
@@ -448,7 +547,7 @@ static int tx_frame(int16_t frame[], complex float symbol[], int length) {
         frame[i] = (int16_t) ((crealf(signal[i]) +
                 cimagf(signal[i])) * 16384.0f); // I at @ .5
     }
-    
+
     return (length * CYCLES);
 }
 
@@ -486,9 +585,9 @@ static void tx_symbol(complex float symbol) {
     fbb_tx_phase /= cabsf(fbb_tx_phase); // normalize as magnitude can drift
 
     for (size_t i = 0; i < CYCLES; i++) {
-        tx_samples[sample_count] = (int16_t) ((crealf(signal[i]) +
+        tx_samples[mcb.sample_count] = (int16_t) ((crealf(signal[i]) +
                 cimagf(signal[i])) * 16384.0f); // I at @ .5
-        sample_count = (sample_count + 1) % MAX_NR_TX_SAMPLES;
+        mcb.sample_count = (mcb.sample_count + 1) % MAX_NR_TX_SAMPLES;
     }
 }
 
@@ -581,7 +680,7 @@ static void preloadFlush() {
  * from the reference data packet
  */
 static void tx_packet(DBlock **packet, int count) {
-    sample_count = 0;
+    mcb.sample_count = 0;
 
     sendPilots();
 
@@ -605,7 +704,7 @@ static void tx_packet(DBlock **packet, int count) {
     qpsk_raw_modulate(FFLAG);
     preloadFlush();
 
-    sample_count *= 2;
+    mcb.sample_count *= 2;
 }
 
 /*
@@ -613,7 +712,7 @@ static void tx_packet(DBlock **packet, int count) {
  * We send it to the sound card here
  */
 static void modem_tx() {
-    write(dsp, tx_samples, sample_count); // int16_t count
+    write(mcb.fd, tx_samples, mcb.sample_count); // int16_t count
 }
 
 static void network_send() {

@@ -52,7 +52,6 @@ const int8_t pilotvalues[] = {
  * hs = gen_rn_coeffs(.35, 1.0/8000.0, 1600, 10, 5);
  */
 const float alpha35_root[] = {
-    0.00187035f,
     -0.00024537f,
     -0.00220636f,
     -0.00291493f,

@@ -28,7 +28,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-#include "qpsk_internal.h"
+#include "qpsk.h"
 #include "fifo.h"
 
 // Functions

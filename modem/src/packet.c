@@ -27,7 +27,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "qpsk_internal.h"
+#include "qpsk.h"
 #include "crc.h"
 #include "fifo.h"
 
@@ -54,13 +54,15 @@ static uint8_t octet;
 /*
  * An 8-bit octet is made-up of four dibits
  */
-void packet_create() {
+int packet_create() {
     packet_queue = create_fifo(QUEUE_LENGTH);
     
     if (packet_queue == (Queue *) NULL) {
         fprintf(stderr, "Fatal: packet_create Unable to create Packet Queue\n");
-        exit(-1);
+        return -1;
     }
+    
+    return 0;
 }
 
 void packet_destroy() {

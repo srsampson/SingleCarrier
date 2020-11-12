@@ -32,7 +32,7 @@ extern "C"
 #endif
 
 #include <stdint.h>
-#include "qpsk_internal.h"
+#include "qpsk.h"
 
 /* Queue control block and associated values */
 

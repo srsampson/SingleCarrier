@@ -82,8 +82,8 @@ extern "C"
 
 typedef enum
 {
-    hunt,
-    process
+    HUNT,
+    PROCESS
 } State;
 
 /* Data block */
@@ -125,10 +125,10 @@ typedef enum
 
 typedef struct
 {
-    int fd; /* Sound descriptor */
+    int fd; // Sound descriptor
     int pd; // Pseudo TTY descriptor
     int td; // PTT descriptor
-    int tx_sample_count;
+    size_t sample_count;
     int sample_rate;
     int center_freq;
     int duplex;
@@ -143,6 +143,19 @@ typedef struct
 
 // Prototypes
 
+void intHandler(int);
+
+int qpsk_pilot_modulate(int16_t []);
+int qpsk_data_modulate(int16_t [], uint8_t [], int);
+int qpsk_raw_modulate(uint8_t);
+
+int qpsk_get_number_of_pilot_bits(void);
+int qpsk_get_number_of_data_bits(void);
+
+void qpsk_rx_freq_shift(complex float [], complex float [], int, int, float, complex float);
+void qpsk_rx_frame(int16_t [], uint8_t []);
+void qpsk_rx_end(void);
+
 void reset_tx_scrambler(void);
 void reset_rx_scrambler(void);
 uint8_t tx_scramble(uint8_t);
@@ -151,7 +164,7 @@ uint8_t rx_descramble(uint8_t);
 void packet_reset(void);
 void packet_dibit_push(uint8_t);
 DBlock *packet_pop(void);
-void packet_create(void);
+int packet_create(void);
 void packet_destroy(void);
 
 DBlock *pseudo_listen(void);
@@ -161,6 +174,7 @@ void pseudo_poll(void);
 void pseudo_write_kiss_control(uint8_t [], size_t);
 void pseudo_write_kiss_data(uint8_t [], size_t);
 
+// TODO
 void ptt_transmit(void);
 void ptt_receive(void);
 void ptt_poll(void);
@@ -168,8 +182,6 @@ void ptt_poll(void);
 void end_of_rx_frame(void);
 int16_t receive_frame(void);
 int16_t getAudioPeak(void);
-
-void intHandler(int);
 
 #ifdef __cplusplus
 }

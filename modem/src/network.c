@@ -37,7 +37,7 @@
 #include <sys/ioctl.h>
 #include <sys/fcntl.h>
 
-#include "qpsk_internal.h"
+#include "qpsk.h"
 #include "fifo.h"
 
 // Externals
@@ -62,25 +62,24 @@ static bool esc_flag;
 static int dbp;
 static int msg_counter;
 
+static int masterfd;
+static char *slavename;
+
 // Functions
 
 /*
  * Legacy AX.25 KISS Pseudo TTY network code
  */
 int pseudo_create() {
-    char *slavedevice;
-
-    int masterfd = open("/dev/ptmx", O_RDWR);
+    masterfd = open("/dev/ptmx", O_RDWR);
 
     if (masterfd == -1 || grantpt(masterfd) == -1 || unlockpt(masterfd) == -1 ||
-            (slavedevice = ptsname(masterfd)) == NULL) {
+            (slavename = ptsname(masterfd)) == NULL) {
         fprintf(stderr, "Unable to open Pseudo Terminal\n");
         return -1;
     }
 
-    mcb.pd = masterfd;
-
-    printf("Pseudo Terminal to connect with: %s\n", slavedevice);
+    printf("Pseudo Terminal to connect with: %s\n", slavename);
 
     esc_flag = false;
     msg_counter = 0;
@@ -99,6 +98,7 @@ int pseudo_create() {
 
 void pseudo_destroy() {
     delete_fifo(pseudo_queue);
+    close(masterfd);
 }
 
 static void kiss_control(uint8_t msg[]) {
