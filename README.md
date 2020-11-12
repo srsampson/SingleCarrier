@@ -9,7 +9,17 @@ The design is driven by the FreeDV 2020 Specifications which were originally des
 I've also added a raw AX.25 packet layer, which uses slightly changed algorithms.
 
 #### Testing Program
-I've created a program called ```qpsk``` that you can run using:
+I've created a program called ```qpsk```
+```
+To compile and create the program, download the:
+```
+export-qpsk.zip
+```
+and burst it into an empty directory, then type:
+```
+make
+```
+Then execute it using:
 ```
 $ padsp ./qpsk
 ```
