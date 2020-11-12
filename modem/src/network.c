@@ -92,7 +92,9 @@ int pseudo_create() {
     }
     
     dbp = 0;
-
+    
+    mcb.pd = masterfd;
+    
     return 0;
 }
 
@@ -132,9 +134,10 @@ void pseudo_poll() {
     int status;
 
     while (1) {
+
         /* read the octet from Blocking pseudo TTY */
         status = read(mcb.pd, &octet, 1);
-        
+
         /*
          * See if no data or error
          */
@@ -172,13 +175,6 @@ void pseudo_poll() {
                             if (pseudo_queue->state != FIFO_FULL) {
                                 push_fifo(pseudo_queue, dataBlock, dbp);
                                 dbp = (dbp + 1) % QUEUE_LENGTH;
-#ifdef DEBUG
-    for (int i = 0; i < dataBlock[dbp - 1].length; i++) {
-        fprintf(stderr, "%02X", dataBlock[dbp - 1].data[i]);
-    }
-    
-    fprintf(stderr, "\n");
-#endif
                             } else {
                                 fprintf(stderr, "warning: pseudo queue overrun\n");
                             }

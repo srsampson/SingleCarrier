@@ -50,11 +50,12 @@ static float cnormf(complex float);
 static float correlate_pilots(complex float [], int);
 static float magnitude_pilots(complex float [], int);
 static complex float qpsk_mod(int []);
-static void qpsk_demod(complex float, int []);
+static Rxed qpsk_demod(complex float [], int);
+static float find_quadrant_and_distance(int *, complex float);
+static int16_t receive_frame(void);
 static int tx_frame(int16_t [], complex float [], int);
 static void tx_packet(DBlock **, int);
 static void tx_symbol(complex float);
-static void modem_tx(void);
 static void network_send(void);
 
 // Externals
@@ -103,7 +104,7 @@ static int16_t peak;        // peak value PCM samples
 // Functions
 
 /*
- * Ctrl-C Interrupt
+ * Control-C Interrupt
  */
 void intHandler(int d) {
     running = false;
@@ -242,7 +243,7 @@ int main(int argc, char **argv) {
          * Check for any AX.25 KISS network input data
          */
         pseudo_poll();
-        
+
         if (state == HUNT) {
             if ((inblock[loop++] = (DBlock *) pseudo_listen()) != NULL) {
 
@@ -256,7 +257,7 @@ int main(int argc, char **argv) {
                  */
                 write(mcb.fd, tx_samples, mcb.sample_count); // int16_t count
             }
-            
+
             loop = 0;
         }
 
@@ -289,7 +290,7 @@ int main(int argc, char **argv) {
 
     close(mcb.fd); // Sound descriptor
     close(mcb.pd); // Pseudo TTY descriptor
-    close(mcb.td); // PTT descriptor
+    //close(mcb.td); // PTT descriptor
     
     return 0;
 }
@@ -337,7 +338,7 @@ static float magnitude_pilots(complex float symbol[], int index) {
 }
 
 /*
- * Gray coded QPSK modulation function
+ * Scramble and Gray coded QPSK modulation function
  *
  *      Q
  *      |
@@ -348,30 +349,11 @@ static float magnitude_pilots(complex float symbol[], int index) {
  * The symbols are not rotated on transmit
  */
 static complex float qpsk_mod(int bits[]) {
-    return constellation[(bits[1] << 1) | bits[0]];
+    uint8_t data = (bits[1] << 1) | bits[0];
+    
+    return constellation[scrambleTX(data)];
 }
 
-/*
- * Gray coded QPSK demodulation function
- *
- *  Q 01   00 I
- *     \ | /
- *      \|/
- *   ----+----
- *      /|\
- *     / | \
- * -I 11   10 -Q
- *
- * By transmitting I+Q at transmitter, the signal has a
- * 45 degree shift, which is just what we need to find
- * the quadrant the symbol is in.
- *
- * Each bit pair differs from the next by only one bit.
- */
-static void qpsk_demod(complex float symbol, int bits[]) {
-    bits[0] = crealf(symbol) < 0.0f; // I < 0 ?
-    bits[1] = cimagf(symbol) < 0.0f; // Q < 0 ?
-}
 /*
  * Receive function
  *
@@ -380,8 +362,23 @@ static void qpsk_demod(complex float symbol, int bits[]) {
  * Each voice frame is made up of 33 Pilots and 31 x 8 Data symbols.
  * This is (33 * 5) = 165 + (31 * 5 * 8) = 1240 or 1405 samples per packet
  */
-void qpsk_rx_frame(int16_t in[], uint8_t bits[]) {
+static int16_t receive_frame() {
+    Rxed rx_symbol;
+    int16_t pcm[FRAME_SIZE * 2];
     complex float fourth = (1.0f / 4.0f);
+
+    /*
+     * Input PCM 16-bit from sound card
+     */
+    if ((read(mcb.fd, pcm, (FRAME_SIZE * 2)) <= 0)) { // read in int16_t (2 * bytes)
+        return peak;
+    }
+    
+    for (int j = 0; j < (FRAME_SIZE * 2); j++) {
+        if (pcm[j] > peak) {
+            peak = pcm[j];
+        }
+    }
 
     /*
      * Convert input PCM to complex samples
@@ -390,7 +387,7 @@ void qpsk_rx_frame(int16_t in[], uint8_t bits[]) {
     for (int i = 0; i < FRAME_SIZE; i++) {
         fbb_rx_phase *= fbb_rx_rect;
 
-        complex float val = fbb_rx_phase * ((float) in[i] / 16384.0f);
+        complex float val = fbb_rx_phase * ((float) pcm[i] / 16384.0f);
 
         input_frame[i] = input_frame[FRAME_SIZE + i];
         input_frame[FRAME_SIZE + i] = val;
@@ -443,6 +440,8 @@ void qpsk_rx_frame(int16_t in[], uint8_t bits[]) {
     mean = magnitude_pilots(decimated_frame, max_index);
 
     if (max_value > (mean * 30.0f)) {
+        packet_reset();
+        resetRXScrambler();
 
         /*
          * We probably have a decoded BPSK pilot frame at this point
@@ -457,30 +456,99 @@ void qpsk_rx_frame(int16_t in[], uint8_t bits[]) {
         /*
          * Declare process state
          */
-        state = PROCESS;
+        mcb.rx_state = PROCESS;
 
         /*
          * Now process the QPSK data frame symbols
          */
-
-
-
-        // qpsk_demod();          // TODO
-
+        for (int i = 0, k = max_index; i < SYMBOLS_PER_BLOCK; i++, k++) {
+            rx_symbol = qpsk_demod(decimated_frame, k);
+        }
     } else {
-        /*
-         * Burn the remainder of frame (total loss)
-         *
-         * Declare hunt state
-         */
-        state = HUNT;
+        /* zero the accumulated cost value */
+
+        mean = 0.0f;
+
+        /* Process any data left over */
+
+        for (int i = 0, k = max_index; i < SYMBOLS_PER_BLOCK; i++, k++) {
+            rx_symbol = qpsk_demod(decimated_frame, k);
+            mean += rx_symbol.cost;
+        }
+
+        /* Check if reached the end of the frame */
+
+        if (mean > EOF_COST_VALUE) {
+            mcb.rx_state = HUNT;
+        }
     }
+        
+    return peak;
 }
 
+static float find_quadrant_and_distance(int *quadrant, complex float symbol) {
+    float distance;
+
+    /*
+     * The smallest distance between constellation
+     * and the symbol, is our gray coded quadrant.
+     * 
+     *      1
+     *      |
+     *  3---+---0
+     *      |
+     *      2
+     */
+
+    float min_value = 200.0f; // some large value
+
+    for (int i = 0; i < 4; i++) {
+        distance = cnormf(symbol - constellation[i]);
+
+        if (distance < min_value) {
+            min_value = distance;
+            *quadrant = i;
+        }
+    }
+
+    return distance;
+}
+
+/*
+ * Gray coded QPSK demodulation function
+ */
+Rxed qpsk_demod(complex float in[], int index) {
+    Rxed rx_symbol;
+    int quadrant;
+    
+    complex float symbol = in[index];
+
+    /* Include what was transmitted */
+    rx_symbol.tx_symb = symbol;
+
+    /* Include cost (distance) for this symbol */
+    rx_symbol.cost = find_quadrant_and_distance(&quadrant, symbol);
+
+    /* Include scrambled received (for error compute) */
+    rx_symbol.rx_scramble_symb = constellation[quadrant];
+    
+    /* Return unscrambled data dibit */
+    rx_symbol.data = scrambleRX(quadrant);    
+    rx_symbol.rx_symb = constellation[rx_symbol.data];
+    
+    /* Push unscrambled data dibit on packet queue */
+    packet_dibit_push(rx_symbol.data);
+    
+    /* Calculate error */
+    rx_symbol.error = (rx_symbol.rx_scramble_symb - symbol) * 0.1f;
+    
+    return rx_symbol;
+}
 
 void qpsk_rx_offset(float fshift) {
     fbb_rx_rect *= cmplx(TAU * fshift / FS);
 }
+
 /*
  * Dead man switch to state end
  */
@@ -541,11 +609,9 @@ static int tx_frame(int16_t frame[], complex float symbol[], int length) {
 
     /*
      * Now return the resulting I+Q
-     * Note: Summation results in 45 deg phase shift
      */
     for (int i = 0; i < (length * CYCLES); i++) {
-        frame[i] = (int16_t) ((crealf(signal[i]) +
-                cimagf(signal[i])) * 16384.0f); // I at @ .5
+        frame[i] = (int16_t) (crealf(signal[i]) * 16384.0f); // I at @ .5
     }
 
     return (length * CYCLES);
@@ -585,8 +651,7 @@ static void tx_symbol(complex float symbol) {
     fbb_tx_phase /= cabsf(fbb_tx_phase); // normalize as magnitude can drift
 
     for (size_t i = 0; i < CYCLES; i++) {
-        tx_samples[mcb.sample_count] = (int16_t) ((crealf(signal[i]) +
-                cimagf(signal[i])) * 16384.0f); // I at @ .5
+        tx_samples[mcb.sample_count] = (int16_t) (crealf(signal[i]) * 16384.0f); // I at @ .5
         mcb.sample_count = (mcb.sample_count + 1) % MAX_NR_TX_SAMPLES;
     }
 }
@@ -625,6 +690,7 @@ int qpsk_data_modulate(int16_t frame[], uint8_t bits[], int index) {
 
     return tx_frame(frame, symbol, DATA_SYMBOLS);
 }
+
 /*
  * Send raw pilots
  */
@@ -633,6 +699,7 @@ static void sendPilots() {
         tx_symbol(pilot_table[i]);
     }
 }
+
 /*
  * Send Four dibits per octet MSB to LSB
  */
@@ -704,15 +771,9 @@ static void tx_packet(DBlock **packet, int count) {
     qpsk_raw_modulate(FFLAG);
     preloadFlush();
 
-    mcb.sample_count *= 2;
-}
+    mcb.sample_count *= 2;  // int16_t count
 
-/*
- * After packet is created with tx_packet
- * We send it to the sound card here
- */
-static void modem_tx() {
-    write(mcb.fd, tx_samples, mcb.sample_count); // int16_t count
+    write(mcb.fd, tx_samples, mcb.sample_count);
 }
 
 static void network_send() {

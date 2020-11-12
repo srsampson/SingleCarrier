@@ -8,7 +8,7 @@ extern "C"
 #include <stdint.h>
 
 #define SEED 0x4A80
-#define BITS 4
+#define BITS 2
 
 /* Prototypes */
 

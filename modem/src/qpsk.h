@@ -45,10 +45,11 @@ extern "C"
 #define CYCLES          (int) (FS / RS)
 #define CENTER          1100.0f
 
-#define NS              8
-#define PILOT_SYMBOLS   33
-#define DATA_SYMBOLS    31
-#define FRAME_SIZE      1405
+#define NS                     8
+#define PILOT_SYMBOLS          33
+#define DATA_SYMBOLS           31
+#define FRAME_SIZE             1405
+#define SYMBOLS_PER_BLOCK      (FRAME_SIZE/4)
 
 // (DATA_SYMBOLS * 2 bits * NS)
 #define BITS_PER_FRAME  496
@@ -56,6 +57,7 @@ extern "C"
 #define QUEUE_LENGTH           20
 #define MAX_PACKET_LENGTH      4096     // some big number
 #define MAX_NR_TX_SAMPLES      100000
+#define EOF_COST_VALUE         5.0f
 
 #define FEND                   0xC0
 #define FESC                   0xDB
@@ -96,8 +98,10 @@ typedef struct
 
 typedef struct
 {
+    complex float rx_scramble_symb;
     complex float rx_symb;
     float cost;
+    float error;
     uint8_t data;
     uint8_t tx_symb;
 } Rxed;
@@ -180,7 +184,6 @@ void ptt_receive(void);
 void ptt_poll(void);
 
 void end_of_rx_frame(void);
-int16_t receive_frame(void);
 int16_t getAudioPeak(void);
 
 #ifdef __cplusplus
