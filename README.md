@@ -20,7 +20,7 @@ This requires ax25-tools to be loaded, as well as:
 sudo apt-get install osspd
 ```
 The latter creates a /dev/dsp device for simple modem control.
-
+#### Transmit Side
 When you run the program it should output:
 ```
 Pseudo Terminal to connect with: /dev/pts/1
@@ -51,6 +51,14 @@ The ```qpsk``` in the ```kissattach``` command is the port name in ```/etc/ax25/
 #2	OH2BNS-9	38400	255	7	TNOS/Linux  (38400 bps)
 qpsk K5OKC-1  38400 255 7 QPSK/Linux  (38400 bps)
 ```
+At this point you can try connecting to a random station and listen to the audio:
+```
+$ sudo kissattach /dev/pts/1 qpsk
+AX.25 port qpsk bound to device ax0
+
+$ axcall qpsk w1aw-10
+```
+#### Receive Side
 I haven't done any debugging on the receive side yet.
 
 To see what the scrambled and unscrambled modem audio sounds like, I put a couple WAV files in the ```docs``` directory.
