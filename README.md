@@ -35,7 +35,7 @@ Full duplex capability 1
 ```
 It then runs in a loop. If you open another window and run:
 ```
-sudo kissattach /dev/pts/1 qam
+sudo kissattach /dev/pts/1 qpsk
 ```
 It will attach a KISS port to the ```/dev/pts/XX``` that was given by ```qpsk```. If you don't delete this attachment, the qpsk will open a different pair the next time you run it. So I always delete the kissattach process before running.
 
