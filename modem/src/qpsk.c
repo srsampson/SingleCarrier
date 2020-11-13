@@ -69,13 +69,12 @@ extern Queue *packet_queue;     // AX.25 Packet queue
 // Globals
 
 MCB mcb;
+bool running;
+bool dpsk_en;
 
 // Locals
 
 static State state;
-
-static bool dpsk_en;
-static bool running;
 
 static complex float tx_filter[NTAPS];
 static complex float rx_filter[NTAPS];
@@ -410,7 +409,8 @@ static int16_t receive_frame() {
         decimated_frame[extended] = input_frame[(i * CYCLES) + (int) roundf(rx_timing)];
 
         /*
-         * Compute the phase error
+         * Compute the QPSK phase error
+         * The BPSK parts will be bogus, but they are short
          */
         float phase_error = cargf(cpowf(decimated_frame[extended], 4.0f) * fourth); // division is slow
 

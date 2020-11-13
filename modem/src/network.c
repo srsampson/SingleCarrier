@@ -1,3 +1,4 @@
+#define DEBUG
 /*---------------------------------------------------------------------------*\
 
   FILE........: network.c
@@ -43,6 +44,7 @@
 // Externals
 
 extern MCB mcb;
+extern bool running;
 
 // Prototypes
 
@@ -71,10 +73,13 @@ static char *slavename;
  * Legacy AX.25 KISS Pseudo TTY network code
  */
 int pseudo_create() {
-    masterfd = open("/dev/ptmx", O_RDWR);
+    uint8_t octet;
+    int status;
 
-    if (masterfd == -1 || grantpt(masterfd) == -1 || unlockpt(masterfd) == -1 ||
-            (slavename = ptsname(masterfd)) == NULL) {
+    mcb.pd = posix_openpt(O_RDWR|O_NOCTTY);
+
+    if (masterfd == -1 || grantpt(mcb.pd) == -1 || unlockpt(mcb.pd) == -1 ||
+            (slavename = ptsname(mcb.pd)) == NULL) {
         fprintf(stderr, "Unable to open Pseudo Terminal\n");
         return -1;
     }
@@ -93,14 +98,23 @@ int pseudo_create() {
     
     dbp = 0;
     
-    mcb.pd = masterfd;
+    // Set the Pseudo Terminal to Non-Blocking
+    // TODO not sure this is needed ??
+    fcntl(mcb.pd, F_SETFL, O_NONBLOCK);
+    
+    /*
+     * Drain anything from port
+     */
+    do {
+        status = read(mcb.pd, &octet, 1);
+    } while (status > 0);
     
     return 0;
 }
 
 void pseudo_destroy() {
     delete_fifo(pseudo_queue);
-    close(masterfd);
+    close(mcb.pd);
 }
 
 static void kiss_control(uint8_t msg[]) {
@@ -133,15 +147,19 @@ void pseudo_poll() {
     uint8_t octet;
     int status;
 
-    while (1) {
+    /*
+     * Allow for Control-C escape with running boolean
+     */
+    while (running == true) {
 
-        /* read the octet from Blocking pseudo TTY */
+        /* read the octet from pseudo TTY */
         status = read(mcb.pd, &octet, 1);
 
         /*
-         * See if no data or error
+         * See if no data or error loop
          */
         if (status <= 0) {
+            // bail out and return to caller
             break;
         } else {
             /*
@@ -164,7 +182,7 @@ void pseudo_poll() {
                          * for encoding port number, etc. We don't
                          * care about that here.
                          */
-                        if ((msg[dbp][0] & 0xF) == 0) {
+                        if (msg[dbp][0] == 0) {
                             /*
                              * Save block of data on the queue
                              * First octet is KISS command, so use 1
@@ -174,6 +192,12 @@ void pseudo_poll() {
 
                             if (pseudo_queue->state != FIFO_FULL) {
                                 push_fifo(pseudo_queue, dataBlock, dbp);
+#ifdef DEBUG
+    for (int i = 0; i < dataBlock[dbp].length; i++) {
+        fprintf(stderr, "%02X", dataBlock[dbp].data[i]);
+    }
+    fprintf(stderr, "\n");
+#endif
                                 dbp = (dbp + 1) % QUEUE_LENGTH;
                             } else {
                                 fprintf(stderr, "warning: pseudo queue overrun\n");
@@ -191,15 +215,21 @@ void pseudo_poll() {
                     msg_counter = 0;
                     break;
                 } else {
-
                     /*
                      * If not FEND Keep adding octets to
                      * the frame and increment counter
                      */
-                    if (octet == FESC) {
-                        esc_flag = true;
+                    if (msg_counter == 0) {
+                        /*
+                         * Upper nibble on command octet problematic
+                         */
+                        msg[dbp][msg_counter++] = (octet & 0xF);
                     } else {
-                        msg[dbp][msg_counter++] = octet;
+                        if (octet == FESC) {
+                            esc_flag = true;
+                        } else {
+                            msg[dbp][msg_counter++] = octet;
+                        }
                     }
                 }
             } else if (octet == TFESC) {    // esc_flag is true
