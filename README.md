@@ -74,7 +74,7 @@ AX.25 port qpsk bound to device ax0
 
 $ ax25_call qam k5okc w1aw
 ```
-In debug you should see:
+In debug you should see this being modulated:
 ```
 AE6282AE4040E0966A9E968640613F (SABM)
 AE6282AE4040E0966A9E968640613F (SABM)
