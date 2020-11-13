@@ -61,7 +61,7 @@ The ```qpsk``` in the ```kissattach``` command is the port name in ```/etc/ax25/
 #2	OH2BNS-9	38400	255	7	TNOS/Linux  (38400 bps)
 qpsk K5OKC-1  38400 255 7 QPSK/Linux  (38400 bps)
 ```
-Due to the way Linux Kernel AX.25 works (or broken), we need an additional step. This is to shut off the CRC checksum on the PTY:
+Due to the way Linux Kernel AX.25 works (or broken), we need an additional step. This is to shut off the CRC checksum on the PTY. I found the solution in direwolf: https://github.com/wb2osz/direwolf/blob/master/src/kiss_frame.c#L551
 ```
 sudo kissparms -c 1 -p qpsk
 ```
