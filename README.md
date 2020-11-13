@@ -82,7 +82,7 @@ AE6282AE4040E0966A9E9686406153 (DISC)
 ```
 You could also give yourself an IP address:
 ```
-sudo kissattach -i 44.78.78.1 -m 128 /dev/pts/2 qpsk
+sudo kissattach -i 44.78.78.1 -m 512 /dev/pts/2 qpsk
 ```
 Where your IP and MTU of 128 octets would be set. You can use ```ifconfig``` and ```route``` to see the changes. Here's an example:
 ```
