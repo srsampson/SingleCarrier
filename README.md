@@ -61,12 +61,24 @@ The ```qpsk``` in the ```kissattach``` command is the port name in ```/etc/ax25/
 #2	OH2BNS-9	38400	255	7	TNOS/Linux  (38400 bps)
 qpsk K5OKC-1  38400 255 7 QPSK/Linux  (38400 bps)
 ```
-At this point you can try connecting to a random station and listen to the audio:
+Due to the way Linux Kernel AX.25 works (or broken), we need an additional step. This is to shut off the CRC checksum on the PTY:
+```
+sudo kissparms -c 1 -p qpsk
+```
+If you don't do this, the port will include the CRC with only the first two packets, then stop. This drives me crazy.
+
+At this point you can try connecting to a random callsign and listen to the scrambled audio:
 ```
 $ sudo kissattach /dev/pts/1 qpsk
 AX.25 port qpsk bound to device ax0
 
-$ axcall qpsk w1aw-10
+$ ax25_call qam k5okc w1aw
+```
+In debug you should see:
+```
+AE6282AE4040E0966A9E968640613F (SABM)
+AE6282AE4040E0966A9E968640613F (SABM)
+AE6282AE4040E0966A9E9686406153 (DISC)
 ```
 #### Receive Side
 I haven't done any debugging on the receive side yet.
