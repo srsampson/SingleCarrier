@@ -87,10 +87,36 @@ $ ping 44.5.5.5
 
 A2A6A840404060966A9E9686406303CD000300CC07040001966A9E968640022C880805000000000000002C050505 (ICMP)
 ```
-You can see why I chose to use a scrambler, as the long string of identical octets will create all sorts of tones and become hard to decode.
+You can see why I chose to use a scrambler, as the long string of identical octets will create all sorts of squeeks, squawks, and tones and might become hard to decode.
 
 #### Receive Side
 I haven't done any debugging on the receive side yet.
 
 To see what the scrambled and unscrambled modem audio sounds like, I put a couple WAV files in the ```docs``` directory.
+
+#### Network Direction
+I've since become aware of the ```tncattach``` tool by Mark Qvist. This is the way forward. I can get rid of all the Pseudo-TTY code and instead use a TCP/IP port for a virtual KISS interface. Also, you don't need the legacy AX.25 Tools, which isn't long for Linux, as it is buggy and very rarely maintained.
+
+https://unsigned.io/ethernet-and-ip-over-packet-radio-tncs/
+
+So, right now I'm still using the PTY port, but plan to re-code for just a TCP Virtual KISS port:
+```
+$ sudo ./tncattach --ipv4=44.78.10.4/24 --mtu=554 --interval=30 --id="K5OKC Oklahoma City" --ethernet --noipv6 --daemon /dev/pts/2 38400
+```
+Which shows up as:
+```
+tnc0: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 554
+        inet 44.78.10.4  netmask 255.255.255.0  broadcast 44.78.10.255
+        ether 0a:c6:cf:22:62:7f  txqueuelen 10  (Ethernet)
+        RX packets 0  bytes 0 (0.0 B)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 19  bytes 2309 (2.3 KB)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+```
+Mark also has a Python 3 tool called ```Reticulum``` which looks like a pretty neat multi-hop networking application. While it was designed to be a secure network, he says it can also operate in several encryptionless modes.
+
+https://unsigned.io/projects/reticulum/
+
+Well anyway, sometimes TCP/IP is overkill. We normally just want to transport data, and in most cases only locally, and not worldwide.
+
 
