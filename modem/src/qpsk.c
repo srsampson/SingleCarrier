@@ -56,7 +56,6 @@ static int16_t receive_frame(void);
 static int tx_frame(int16_t [], complex float [], int);
 static void tx_packet(DBlock **, int);
 static void tx_symbol(complex float);
-static void network_send(void);
 
 // Externals
 
@@ -773,15 +772,4 @@ static void tx_packet(DBlock **packet, int count) {
     mcb.sample_count *= 2;  // int16_t count
 
     write(mcb.fd, tx_samples, mcb.sample_count);
-}
-
-static void network_send() {
-    while (packet_queue->state != FIFO_EMPTY) {
-        DBlock *packet = packet_pop();
-
-        /*
-         * Send packets to the AX.25 KISS network
-         */
-        pseudo_write_kiss_data(packet->data, packet->length);
-    }
 }

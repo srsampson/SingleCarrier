@@ -1,4 +1,4 @@
-### Single Carrier QPSK Modem
+### QPSK Modem
 A Single Carrier 1600 Baud Coherent QPSK Modem for Voice and Data
 
 #### Description
@@ -69,9 +69,6 @@ If you don't do this, the port will include the CRC with only the first two pack
 
 At this point you can try connecting to a random callsign and listen to the scrambled audio:
 ```
-$ sudo kissattach /dev/pts/1 qpsk
-AX.25 port qpsk bound to device ax0
-
 $ ax25_call qam k5okc w1aw
 ```
 In debug you should see this being modulated:
@@ -82,9 +79,9 @@ AE6282AE4040E0966A9E9686406153 (DISC)
 ```
 You could also give yourself an IP address:
 ```
-sudo kissattach -i 44.78.78.1 -m 512 /dev/pts/2 qpsk
+sudo kissattach -i 44.78.78.1 -m 512 /dev/pts/1 qpsk
 ```
-Where your IP and MTU of 128 octets would be set. You can use ```ifconfig``` and ```route``` to see the changes. Here's an example:
+Where your IP and MTU of 512 octets would be set. You can use ```ifconfig``` and ```route``` to see the changes. Here's an example:
 ```
 $ ping 44.5.5.5
 
