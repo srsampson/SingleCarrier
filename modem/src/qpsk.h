@@ -132,9 +132,10 @@ typedef enum
 
 typedef struct
 {
-    int    fd;     // Sound descriptor
-    int    sockfd; // Network descriptor
-    int    td;     // PTT descriptor
+    int    fd;       // Sound descriptor
+    int    sockfd;   // Network descriptor
+    int    td;       // PTT descriptor
+    bool   scramble; // enable bit-scrambler
     size_t sample_count;
     int    sample_rate;
     int    center_freq;
@@ -152,6 +153,7 @@ typedef struct
 
 void intHandler(int);
 
+void qpsk_enable_scrambler(bool);
 int qpsk_pilot_modulate(int16_t []);
 int qpsk_data_modulate(int16_t [], uint8_t [], int);
 void qpsk_rx_end(void);

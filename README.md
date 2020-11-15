@@ -23,7 +23,13 @@ Then execute it using:
 ```
 $ padsp ./qpsk
 ```
-This starts the program which runs in a loop looking for either soundcard audio, or pseudo-terminal input.
+or:
+```
+$ padsp ./qpsk -ns
+```
+For no bit-scrambler.
+
+This starts the program which runs in a loop looking for either soundcard audio, or network input.
 
 This requires osspd to be loaded, as well:
 ```

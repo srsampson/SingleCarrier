@@ -24,6 +24,8 @@
   along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
+#define  _DEFAULT_SOURCE
+
 // Includes
 
 #include <stdio.h>
@@ -108,6 +110,20 @@ void intHandler(int d) {
 
 int main(int argc, char **argv) {
     int arg, status;
+
+    /*
+     * Default to bit-scramble on
+     */
+    mcb.scramble = true;
+    
+    /*
+     * See if no-scramble desired
+     */
+    if (argc > 1) {
+        if (strncmp(argv[1], "-ns", 3) == 0) {
+            mcb.scramble = false;
+        }
+    }
 
     /*
      * Create a complex table of pilot values
@@ -255,6 +271,10 @@ int main(int argc, char **argv) {
 }
 
 // Functions
+
+void qpsk_enable_scrambler(bool val) {
+    mcb.scramble = val;
+}
 
 int16_t qpsk_get_audio_peak() {
     return peak;

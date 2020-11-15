@@ -31,7 +31,12 @@
 
 #include <stdint.h>
 
+#include "qpsk.h"
 #include "scramble.h"
+
+// Globals
+
+extern MCB mcb;
 
 // Locals
 
@@ -47,38 +52,41 @@ void resetTXScrambler() {
 void resetRXScrambler() {
     scrambleRXMemory = SEED;
 }
-
 /* 
  * Functions duplicated for Full-Duplex operation.
  */
 uint8_t scrambleTX(uint8_t input) {
-    for (int i = 0; i < BITS; i++) {
-        uint16_t scrambler_out = (uint16_t) (((scrambleTXMemory & 0x2) >> 1) ^ (scrambleTXMemory & 0x1));
-        uint16_t bits = (uint16_t) (((input >> i) & 0x1) ^ scrambler_out);
+    if (mcb.scramble == true) {
+        for (int i = 0; i < BITS; i++) {
+            uint16_t scrambler_out = (uint16_t) (((scrambleTXMemory & 0x2) >> 1) ^ (scrambleTXMemory & 0x1));
+            uint16_t bits = (uint16_t) (((input >> i) & 0x1) ^ scrambler_out);
 
-        input &= ~(1 << i);
-        input |= (bits << i);
+            input &= ~(1 << i);
+            input |= (bits << i);
 
-        /* update scrambler memory */
-        scrambleTXMemory >>= 1;
-        scrambleTXMemory |= (scrambler_out << 14);
+            /* update scrambler memory */
+            scrambleTXMemory >>= 1;
+            scrambleTXMemory |= (scrambler_out << 14);
+        }
     }
-    
+
     return input;
 }
 
 uint8_t scrambleRX(uint8_t input) {
-    for (int i = 0; i < BITS; i++) {
-        uint16_t scrambler_out = (uint16_t) (((scrambleRXMemory & 0x2) >> 1) ^ (scrambleRXMemory & 0x1));
-        uint16_t bits = (uint16_t) (((input >> i) & 0x1) ^ scrambler_out);
+    if (mcb.scramble == true) {
+        for (int i = 0; i < BITS; i++) {
+            uint16_t scrambler_out = (uint16_t) (((scrambleRXMemory & 0x2) >> 1) ^ (scrambleRXMemory & 0x1));
+            uint16_t bits = (uint16_t) (((input >> i) & 0x1) ^ scrambler_out);
 
-        input &= ~(1 << i);
-        input |= (bits << i);
+            input &= ~(1 << i);
+            input |= (bits << i);
 
-        /* update scrambler memory */
-        scrambleRXMemory >>= 1;
-        scrambleRXMemory |= (scrambler_out << 14);
+            /* update scrambler memory */
+            scrambleRXMemory >>= 1;
+            scrambleRXMemory |= (scrambler_out << 14);
+        }
     }
-    
+
     return input;
 }
