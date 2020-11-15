@@ -2,9 +2,9 @@
 
   FILE........: fifo.c
   AUTHORS.....: David Rowe & Steve Sampson
-  DATE CREATED: October 2020
+  DATE CREATED: November 2020
 
-  A Library of functions that implement a QPSK modem
+  A QPSK modem FIFO Queue
 
 \*---------------------------------------------------------------------------*/
 /*
@@ -27,6 +27,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <stdbool.h>
 
 #include "qpsk.h"
 #include "fifo.h"
@@ -37,7 +38,7 @@ Queue *create_fifo(size_t length) {
     if (length == 0)
         return (Queue *) NULL;  // Doh!
 
-    Queue *queue = (Queue *) malloc(sizeof (Queue));
+    Queue *queue = (Queue *) calloc(1, sizeof (Queue));
 
     if (queue != NULL) {
         queue->max_length = length - 1U;
@@ -50,11 +51,11 @@ Queue *create_fifo(size_t length) {
         queue->tail_pointer = 0;
         queue->state = FIFO_EMPTY;
     }
-
+    
     return queue;
 }
 
-void delete_fifo(Queue *queue) {
+void fifo_destroy(Queue *queue) {
     if (queue != NULL) {
         free(queue->queue);
         free(queue);
@@ -76,6 +77,8 @@ void push_fifo(Queue *queue, DBlock item[], int index) {
 
     if (queue->head_pointer == queue->tail_pointer) {
         queue->state = FIFO_FULL;
+    } else {
+        queue->state = FIFO_DATA;
     }
 }
 
@@ -103,6 +106,6 @@ DBlock *pop_fifo(Queue *queue) {
     if (queue->head_pointer == queue->tail_pointer) {
         queue->state = FIFO_EMPTY;
     }
-    
+
     return item;
 }

@@ -2,9 +2,9 @@
 
   FILE........: fifo.h
   AUTHORS.....: David Rowe & Steve Sampson
-  DATE CREATED: October 2020
+  DATE CREATED: November 2020
 
-  A Library of functions that implement a QPSK modem
+  A QPSK modem FIFO Queue
 
 \*---------------------------------------------------------------------------*/
 /*
@@ -32,12 +32,15 @@ extern "C"
 #endif
 
 #include <stdint.h>
+#include <stdbool.h>
+
 #include "qpsk.h"
 
 /* Queue control block and associated values */
 
 typedef enum
 {
+    FIFO_DATA,
     FIFO_EMPTY,
     FIFO_FULL
 } Queue_status;
@@ -55,7 +58,7 @@ typedef struct
     DBlock **queue;
 } Queue;
 
-void delete_fifo(Queue *);
+void fifo_destroy(Queue *);
 void push_fifo(Queue *, DBlock [], int);
 DBlock *pop_fifo(Queue *);
 Queue *create_fifo(size_t);

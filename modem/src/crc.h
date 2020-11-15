@@ -2,9 +2,9 @@
 
   FILE........: crc.h
   AUTHORS.....: David Rowe & Steve Sampson
-  DATE CREATED: October 2020
+  DATE CREATED: November 2020
 
-  A Library of functions that implement a QPSK modem
+  A QPSK modem 16-bit CRC
 
 \*---------------------------------------------------------------------------*/
 /*

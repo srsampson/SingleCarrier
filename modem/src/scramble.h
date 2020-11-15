@@ -1,3 +1,9 @@
+/*
+ * scrambler.h
+ * 
+ * November 2020
+ */
+
 #pragma once
 
 #ifdef	__cplusplus

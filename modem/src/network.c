@@ -3,9 +3,9 @@
 
   FILE........: network.c
   AUTHORS.....: David Rowe & Steve Sampson
-  DATE CREATED: October 2020
+  DATE CREATED: November 2020
 
-  A Dynamic Library of functions that implement a QPSK modem
+  A QPSK modem network interface
 
 \*---------------------------------------------------------------------------*/
 /*
@@ -32,11 +32,15 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdbool.h>
-#include <termios.h>
-#include <errno.h>
-#include <unistd.h>
+#include <string.h>
 #include <sys/ioctl.h>
-#include <sys/fcntl.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <netdb.h>
+#include <pthread.h>
 
 #include "qpsk.h"
 #include "fifo.h"
@@ -45,122 +49,62 @@
 
 extern MCB mcb;
 extern bool running;
+extern Queue *packet_queue;
+extern pthread_mutex_t packet_lock;
 
 // Prototypes
 
 static void kiss_control(uint8_t []);
+static void *socketReadThread(void *);
+static void *socketWriteThread(void *);
+static void *transmitThread(void *);
 
 // Globals
 
-Queue *pseudo_queue;
+Queue *network_queue;
+pthread_mutex_t network_lock = PTHREAD_MUTEX_INITIALIZER;
 
 // Locals
 
 static uint8_t msg[QUEUE_LENGTH][MAX_PACKET_LENGTH];
 static DBlock dataBlock[QUEUE_LENGTH];
+static DBlock *inblock[QUEUE_LENGTH];
 
-static bool esc_flag;
+static pthread_t rid;
+static pthread_t wid;
+static pthread_t tid;
 
 static int dbp;
 static int msg_counter;
+static int serverSocket;
 
-static int masterfd;
-static char *slavename;
+static bool esc_flag;
 
 // Functions
 
 /*
- * Legacy AX.25 KISS Pseudo TTY network code
+ * Receive data on socket and push onto queue
  */
-int pseudo_create() {
+static void *socketReadThread(void *arg) {
     uint8_t octet;
-    int status;
-
-    mcb.pd = posix_openpt(O_RDWR|O_NOCTTY);
-
-    if (masterfd == -1 || grantpt(mcb.pd) == -1 || unlockpt(mcb.pd) == -1 ||
-            (slavename = ptsname(mcb.pd)) == NULL) {
-        fprintf(stderr, "Unable to open Pseudo Terminal\n");
-        return -1;
-    }
-
-    printf("Pseudo Terminal to connect with: %s\n", slavename);
-
-    esc_flag = false;
-    msg_counter = 0;
-
-    pseudo_queue = create_fifo(QUEUE_LENGTH);
-
-    if (pseudo_queue == (Queue *) NULL) {
-        fprintf(stderr, "Fatal: pseudo_create unable to create Queue\n");
-        return -1;
-    }
-    
-    dbp = 0;
-    
-    // Set the Pseudo Terminal to Non-Blocking
-    // TODO not sure this is needed ??
-    fcntl(mcb.pd, F_SETFL, O_NONBLOCK);
-    
-    /*
-     * Drain anything from port
-     */
-    do {
-        status = read(mcb.pd, &octet, 1);
-    } while (status > 0);
-    
-    return 0;
-}
-
-void pseudo_destroy() {
-    delete_fifo(pseudo_queue);
-    close(mcb.pd);
-}
-
-static void kiss_control(uint8_t msg[]) {
-    switch (msg[0] & 0x0F) {
-        case 1:
-            /* TX Delay */
-            mcb.tx_delay = msg[1];
-            break;
-        case 2:
-            /* Persistence */
-            break;
-        case 3:
-            /* Slot time */
-            break;
-        case 4:
-            /* TX Tail */
-            mcb.tx_tail = msg[1];
-            break;
-        case 5:
-            /* Full Duplex */
-            mcb.duplex = msg[1];
-        default:
-            break;
-    }
-}
-/*
- * Poll the pseudo TTY input and push onto queue
- */
-void pseudo_poll() {
-    uint8_t octet;
-    int status;
+    ssize_t count;
 
     /*
      * Allow for Control-C escape with running boolean
      */
     while (running == true) {
 
-        /* read the octet from pseudo TTY */
-        status = read(mcb.pd, &octet, 1);
-
+        /* read from socket */
+        count = recv(mcb.sockfd, &octet, 1, 0);
+        
         /*
-         * See if no data or error loop
+         * See if client closed
          */
-        if (status <= 0) {
-            // bail out and return to caller
+        if (count == 0) {
+            running = false;
             break;
+        } else if (count < 0) {
+            sleep(1);
         } else {
             /*
              * Process data if we have at least one character
@@ -190,8 +134,13 @@ void pseudo_poll() {
                             dataBlock[dbp].data = &msg[dbp][1];
                             dataBlock[dbp].length = (msg_counter - 1);
 
-                            if (pseudo_queue->state != FIFO_FULL) {
-                                push_fifo(pseudo_queue, dataBlock, dbp);
+
+                            
+                            if (network_queue->state != FIFO_FULL) {
+                                pthread_mutex_lock(&network_lock);
+                                
+                                push_fifo(network_queue, dataBlock, dbp);
+
 #ifdef DEBUG
     for (int i = 0; i < dataBlock[dbp].length; i++) {
         fprintf(stderr, "%02X", dataBlock[dbp].data[i]);
@@ -199,8 +148,10 @@ void pseudo_poll() {
     fprintf(stderr, "\n");
 #endif
                                 dbp = (dbp + 1) % QUEUE_LENGTH;
+                                
+                                pthread_mutex_unlock(&network_lock);
                             } else {
-                                fprintf(stderr, "warning: pseudo queue overrun\n");
+                                fprintf(stderr, "Warning: network queue overrun\n");
                             }
                         } else {
                             /*
@@ -213,7 +164,6 @@ void pseudo_poll() {
                     // It's a start, or we just pushed to queue
 
                     msg_counter = 0;
-                    break;
                 } else {
                     /*
                      * If not FEND Keep adding octets to
@@ -241,82 +191,208 @@ void pseudo_poll() {
             esc_flag = false;   // toggle back
         }
     }
+    
+    pthread_exit(NULL);
 }
 
-/*
- * Returns Data Block containing network KISS data
- * to be sent to the modem transmitter
- */
-DBlock *pseudo_listen() {
-    return pop_fifo(pseudo_queue);
-}
+static void *transmitThread(void *arg) {
+    int loop = 0;
+    
+    /*
+     * Allow for Control-C escape with running boolean
+     */
+    while (running == true) {
+        if (network_queue->state != FIFO_EMPTY) {
+            pthread_mutex_lock(&network_lock);
+            
+            if ((inblock[loop++] = (DBlock *) pop_fifo(network_queue)) != NULL) {
 
-/*
- * Write data to the pseudo TTY
- */
-void pseudo_write_kiss_control(uint8_t msg[], size_t length) {
-    uint8_t data[2];
+                while ((inblock[loop] = pop_fifo(network_queue)) != NULL)
+                    loop++;
 
-    data[0] = FEND;
-
-    write(mcb.pd, data, 1);
-
-    for (size_t i = 0; i < length; i++) {
-        if (msg[i] == FEND) {
-            data[0] = FESC;
-            data[1] = TFEND;
-            write(mcb.pd, data, 2);
-        } else if (msg[i] == FESC) {
-            data[0] = FESC;
-            data[1] = TFESC;
-            write(mcb.pd, data, 2);
-        } else {
-            write(mcb.pd, &msg[i], 1);
+                tx_packet(inblock, loop);
+            }
+            
+            pthread_mutex_unlock(&network_lock);
+            loop = 0;
         }
+        
+      
+        
+        sleep(1);
     }
 
-    data[0] = FEND;
-
-    write(mcb.pd, data, 1);
+    pthread_exit(NULL);
 }
 
 /*
- * Set KISS Command byte to 0
- * 
- * The data is in the local static memory array msg[n][]
- * The queue merely stores a reference to it. There can
- * be at most QUEUE_LENGTH packets.
+ * Now process any decoded modem input data
+ *
+ * Returns Data Block from network socket
+ * containing the KISS encapsulated data
+ * to be sent to the modem transmitter
+ *
  */
-void pseudo_write_kiss_data(uint8_t *data, size_t length) {
+static void *socketWriteThread(void *arg) {
+    DBlock *dblock;
     uint8_t frame[2];
 
-    frame[0] = FEND;
-    frame[1] = 0;
-
-    write(mcb.pd, frame, 2);
-
     /*
-     * Encode any Framing octets while sending data
-     * to the AX.25 network using the pseudo TTY
+     * Allow for Control-C escape with running boolean
      */
-    for (size_t i = 0; i < length; i++) {
-        if (data[i] == FEND) {
-            frame[0] = FESC;
-            frame[1] = TFEND;
-            write(mcb.pd, frame, 2);
-        } else if (data[i] == FESC) {
-            frame[0] = FESC;
-            frame[1] = TFESC;
-            write(mcb.pd, frame, 2);
-        } else {
+    while (running == true) {
+        while (packet_queue->state != FIFO_EMPTY) {
+            pthread_mutex_lock(&packet_lock);
+            
+            dblock = pop_fifo(packet_queue);
+            
+            pthread_mutex_unlock(&packet_lock);
+            
             /*
-             * raw AX.25 data
+             * Send packets to the AX.25 KISS network
              */
-            write(mcb.pd, &data[i], 1);
+            frame[0] = FEND;
+            frame[1] = 0;
+
+            send(mcb.sockfd, frame, 2, 0);
+
+            /*
+             * Encode any Framing octets while sending data
+             * to the AX.25 network using the network socket
+             */
+            for (size_t i = 0; i < dblock->length; i++) {
+                if (dblock->data[i] == FEND) {
+                    frame[0] = FESC;
+                    frame[1] = TFEND;
+                    send(mcb.sockfd, frame, 2, 0);
+                } else if (dblock->data[i] == FESC) {
+                    frame[0] = FESC;
+                    frame[1] = TFESC;
+                    send(mcb.sockfd, frame, 2, 0);
+                } else {
+                    /*
+                     * raw AX.25 data
+                     */
+                    send(mcb.sockfd, &dblock->data[i], 1, 0);
+                }
+            }
+
+            frame[0] = FEND;
+
+            send(mcb.sockfd, frame, 1, 0);
         }
+        
+        sleep(1);
+    }
+    
+    pthread_exit(NULL);
+}
+
+/*
+ * TCP/IP network code
+ */
+int network_create() {
+    /*
+     * Create a queue
+     */
+    network_queue = create_fifo(QUEUE_LENGTH);
+
+    serverSocket = socket(AF_INET, SOCK_STREAM, 0);
+
+    if (serverSocket < 0) {
+        fprintf(stderr, "Could not open server socket\n");
+        return -1;
+    }
+    
+    struct sockaddr_in serverAddr;
+    struct sockaddr_in client;
+    
+    memset(&serverAddr, 0, sizeof(serverAddr));
+
+    // assign IP, PORT 
+    serverAddr.sin_family = AF_INET; 
+    serverAddr.sin_addr.s_addr = inet_addr(NETWORK_ADDR); 
+    serverAddr.sin_port = htons(NETWORK_PORT);
+
+    if (bind(serverSocket, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) < 0) {
+        fprintf(stderr, "Fatal: TCP socket bind fail\n");
+        return -1;
     }
 
-    frame[0] = FEND;
+    /*
+     * Only 1 connection
+     */
+    if ((listen(serverSocket, 1)) != 0) { 
+        fprintf(stderr, "Fatal: TCP socket listen failed\n"); 
+        return -1; 
+    }
+    
+    /*
+     * OK, we have a connect
+     */
+    socklen_t client_length = sizeof(client);
 
-    write(mcb.pd, frame, 1);
+    int sockfd = accept(serverSocket, (struct sockaddr *)&client, &client_length);
+
+    if (sockfd < 0) { 
+        fprintf(stderr, "Fatal: Server accept failed\n"); 
+        return -1; 
+    } else {
+        fprintf(stderr, "\nConnect...\n");
+    }
+
+    mcb.sockfd = sockfd;
+
+    if (pthread_create(&rid, NULL, socketReadThread, NULL) != 0) {
+        fprintf(stderr, "Fatal: Failed to create read socket thread\n");
+        return -1;
+    }
+    
+    if (pthread_create(&wid, NULL, socketWriteThread, NULL) != 0) {
+        fprintf(stderr, "Fatal: Failed to create write socket thread\n");
+        return -1;
+    }
+    
+    if (pthread_create(&tid, NULL, transmitThread, NULL) != 0) {
+        fprintf(stderr, "Fatal: Failed to create transmit thread\n");
+        return -1;
+    }
+
+    dbp = 0;
+    esc_flag = false;
+    msg_counter = 0;
+
+    return 0;
+}
+
+void network_destroy() {
+    pthread_join(wid, NULL);
+    pthread_join(rid, NULL);
+    pthread_join(tid, NULL);
+    
+    fifo_destroy(network_queue);
+    close(mcb.sockfd);
+    close(serverSocket);
+}
+
+static void kiss_control(uint8_t msg[]) {
+    switch (msg[0] & 0x0F) {
+        case 1:
+            /* TX Delay */
+            mcb.tx_delay = msg[1];
+            break;
+        case 2:
+            /* Persistence */
+            break;
+        case 3:
+            /* Slot time */
+            break;
+        case 4:
+            /* TX Tail */
+            mcb.tx_tail = msg[1];
+            break;
+        case 5:
+            /* Full Duplex */
+            mcb.duplex = msg[1];
+    }
 }

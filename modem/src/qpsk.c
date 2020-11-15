@@ -2,9 +2,9 @@
 
   FILE........: qpsk.c
   AUTHORS.....: David Rowe & Steve Sampson
-  DATE CREATED: October 2020
+  DATE CREATED: November 2020
 
-  A Dynamic Library of functions that implement a QPSK modem
+  A QPSK modem Soundcard Application
 
 \*---------------------------------------------------------------------------*/
 /*
@@ -54,7 +54,6 @@ static Rxed qpsk_demod(complex float [], int);
 static float find_quadrant_and_distance(int *, complex float);
 static int16_t receive_frame(void);
 static int tx_frame(int16_t [], complex float [], int);
-static void tx_packet(DBlock **, int);
 static void tx_symbol(complex float);
 
 // Externals
@@ -62,7 +61,7 @@ static void tx_symbol(complex float);
 extern const int8_t pilotvalues[];
 extern const complex float constellation[];
 
-extern Queue *pseudo_queue;     // PTY Pseudo-Terminal
+extern Queue *network_queue;    // KISS Network queue
 extern Queue *packet_queue;     // AX.25 Packet queue
 
 // Globals
@@ -83,8 +82,6 @@ static complex float pilot_table[PILOT_SYMBOLS];
 static complex float rx_pilot[PILOT_SYMBOLS];
 
 static int16_t tx_samples[MAX_NR_TX_SAMPLES];
-
-DBlock *inblock[QUEUE_LENGTH];
 
 // Separate phase references for full duplex
 
@@ -111,22 +108,6 @@ void intHandler(int d) {
 
 int main(int argc, char **argv) {
     int arg, status;
-
-    /*
-     * Create the  Pseudo-Terminal interface
-     * pseudo_queue will be created
-     */
-    if (pseudo_create() == -1) {
-        return -1;
-    }
-
-    /*
-     * Create AX.25 packet interface
-     * packet_queue will be created
-     */
-    if (packet_create() == -1) {
-        return -1;
-    }
 
     /*
      * Create a complex table of pilot values
@@ -230,64 +211,44 @@ int main(int argc, char **argv) {
 
     signal(SIGINT, intHandler); /* Exit gracefully */
     running = true;
-
-    int loop = 0;
     
+    /*
+     * Create the  network interface
+     * network_queue will be created
+     */
+    if (network_create() == -1) {
+        return -1;
+    }
+
+    /*
+     * Create AX.25 packet interface
+     * packet_queue will be created
+     */
+    if (packet_create() == -1) {
+        return -1;
+    }
+
     /*
      * loop forever
      */
     while (running == true) {
         /*
-         * Check for any AX.25 KISS network input data
+         * Check the modem for soundcard input data
          */
-        pseudo_poll();
-
-        if (state == HUNT) {
-            if ((inblock[loop++] = (DBlock *) pseudo_listen()) != NULL) {
-
-                while ((inblock[loop] = pseudo_listen()) != NULL)
-                    loop++;
-
-                tx_packet(inblock, loop);
-
-                /*
-                 * Send it using modem
-                 */
-                write(mcb.fd, tx_samples, mcb.sample_count); // int16_t count
-            }
-
-            loop = 0;
-        }
-
-        /*
-         * Check the modem for input data
-         */
-
         peak = receive_frame();
         
-        /*
-         * Now process any QAM decoded modem input data
-         */
-        while (packet_queue->state != FIFO_EMPTY) {
-            DBlock *dblock = packet_pop();
-
-            /*
-             * Send packets to the AX.25 KISS network
-             */
-            pseudo_write_kiss_data(dblock->data, dblock->length);
-        }
-
         /*
          * Check that the DSP transmit is done
          */
         //ptt_poll();
+        
+        sleep(1);   // Allow network threads some time
     }
 
-    packet_destroy();
-    pseudo_destroy();
+    packet_destroy();   // Also destroys...
+    network_destroy();  // ...fifo queues
 
     close(mcb.fd); // Sound descriptor
-    close(mcb.pd); // Pseudo TTY descriptor
     //close(mcb.td); // PTT descriptor
     
     return 0;
@@ -609,7 +570,7 @@ static int tx_frame(int16_t frame[], complex float symbol[], int length) {
      * Now return the resulting I+Q
      */
     for (int i = 0; i < (length * CYCLES); i++) {
-        frame[i] = (int16_t) (crealf(signal[i]) * 16384.0f); // I at @ .5
+        frame[i] = (int16_t) (crealf(signal[i]) * 8192.0f); // I at @ .5
     }
 
     return (length * CYCLES);
@@ -649,7 +610,7 @@ static void tx_symbol(complex float symbol) {
     fbb_tx_phase /= cabsf(fbb_tx_phase); // normalize as magnitude can drift
 
     for (size_t i = 0; i < CYCLES; i++) {
-        tx_samples[mcb.sample_count] = (int16_t) (crealf(signal[i]) * 16384.0f); // I at @ .5
+        tx_samples[mcb.sample_count] = (int16_t) (crealf(signal[i]) * 8192.0f); // I at @ .5
         mcb.sample_count = (mcb.sample_count + 1) % MAX_NR_TX_SAMPLES;
     }
 }
@@ -735,7 +696,7 @@ static void sendCRC() {
  * Preload scrambler LFSR
  */
 static void preloadFlush() {
-    for (size_t i = 0; i < 8; i++) {
+    for (size_t i = 0; i < 4; i++) {
         qpsk_raw_modulate(0x00);
     }
 }
@@ -744,7 +705,7 @@ static void preloadFlush() {
  * Construct a transmit packet of count octets
  * from the reference data packet
  */
-static void tx_packet(DBlock **packet, int count) {
+void tx_packet(DBlock **packet, int count) {
     mcb.sample_count = 0;
 
     sendPilots();

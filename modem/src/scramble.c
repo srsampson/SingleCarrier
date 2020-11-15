@@ -1,4 +1,8 @@
 /*
+ * scramble.c
+ * 
+ * November 2020
+ * 
  * Note: This is not a Cryptographic Scrambler, it is a Bit Scrambler.
  *
  * This Linear Feedback Shift Register is taken from the Digital Video

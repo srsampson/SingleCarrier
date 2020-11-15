@@ -1,10 +1,10 @@
 /*---------------------------------------------------------------------------*\
 
-  FILE........: qpsk_internal.h
+  FILE........: qpsk.h
   AUTHORS.....: David Rowe & Steve Sampson
-  DATE CREATED: October 2020
+  DATE CREATED: November 2020
 
-  A Library of functions that implement a QPSK modem
+  A QPSK modem Soundcard Application
 
 \*---------------------------------------------------------------------------*/
 /*
@@ -54,7 +54,7 @@ extern "C"
 // (DATA_SYMBOLS * 2 bits * NS)
 #define BITS_PER_FRAME  496
     
-#define QUEUE_LENGTH           20
+#define QUEUE_LENGTH           40
 #define MAX_PACKET_LENGTH      4096     // some big number
 #define MAX_NR_TX_SAMPLES      100000
 #define EOF_COST_VALUE         5.0f
@@ -66,6 +66,9 @@ extern "C"
 #define FFLAG                  0x7E
 #define FFESC                  0x7D
 
+#define NETWORK_PORT           33340
+#define NETWORK_ADDR           "127.0.0.1"
+    
 #ifndef M_PI
 #define M_PI            3.14159265358979323846f
 #endif
@@ -130,7 +133,7 @@ typedef enum
 typedef struct
 {
     int fd; // Sound descriptor
-    int pd; // Pseudo TTY descriptor
+    int sockfd; // Network descriptor
     int td; // PTT descriptor
     size_t sample_count;
     int sample_rate;
@@ -163,20 +166,20 @@ void qpsk_rx_end(void);
 void reset_tx_scrambler(void);
 void reset_rx_scrambler(void);
 uint8_t tx_scramble(uint8_t);
+void tx_packet(DBlock **, int);
 uint8_t rx_descramble(uint8_t);
 
+int packet_create(void);
+void packet_destroy(void);
 void packet_reset(void);
 void packet_dibit_push(uint8_t);
 DBlock *packet_pop(void);
-int packet_create(void);
-void packet_destroy(void);
 
-DBlock *pseudo_listen(void);
-int pseudo_create(void);
-void pseudo_destroy(void);
-void pseudo_poll(void);
-void pseudo_write_kiss_control(uint8_t [], size_t);
-void pseudo_write_kiss_data(uint8_t [], size_t);
+int network_create(void);
+void network_destroy(void);
+DBlock *network_pop(void);
+void network_kiss_read(void);
+void network_kiss_write(uint8_t [], size_t);
 
 // TODO
 void ptt_transmit(void);

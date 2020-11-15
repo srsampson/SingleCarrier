@@ -2,9 +2,9 @@
 
   FILE........: fir.h
   AUTHORS.....: David Rowe & Steve Sampson
-  DATE CREATED: October 2020
+  DATE CREATED: November 2020
 
-  A FIR filter used in the QPSK modem
+  A QPSK modem FIR filter
 
 \*---------------------------------------------------------------------------*/
 /*

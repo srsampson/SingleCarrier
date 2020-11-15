@@ -2,7 +2,7 @@
 
   FILE........: constants.c
   AUTHORS.....: David Rowe & Steve Sampson
-  DATE CREATED: October 2020
+  DATE CREATED: November 2020
 
   Constants used in the QPSK modem
 

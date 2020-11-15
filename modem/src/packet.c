@@ -2,9 +2,9 @@
 
   FILE........: packet.c
   AUTHORS.....: David Rowe & Steve Sampson
-  DATE CREATED: October 2020
+  DATE CREATED: November 2020
 
-  A Dynamic Library of functions that implement a QPSK modem
+  A QPSK modem Transmitter Packet Assembler
 
 \*---------------------------------------------------------------------------*/
 /*
@@ -26,6 +26,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <pthread.h>
 
 #include "qpsk.h"
 #include "crc.h"
@@ -38,6 +39,7 @@ static void packet_push(size_t);
 // Globals
 
 Queue *packet_queue;
+pthread_mutex_t packet_lock = PTHREAD_MUTEX_INITIALIZER;
 
 // Locals
 
@@ -66,7 +68,7 @@ int packet_create() {
 }
 
 void packet_destroy() {
-    delete_fifo(packet_queue);
+    fifo_destroy(packet_queue);
 }
 
 void packet_reset() {
@@ -87,16 +89,16 @@ static void packet_push(size_t length) {
     }
     
     if (packet_queue->state != FIFO_FULL) {
-        push_fifo(packet_queue, dblock, 0);
+            pthread_mutex_lock(&packet_lock);
+            
+            push_fifo(packet_queue, dblock, 0);
+            
+            pthread_mutex_unlock(&packet_lock);
     } else {
         /* Queue overflowed */
         free(dblock->data);
         free(dblock);
     }
-}
-
-DBlock *packet_pop() {
-    return pop_fifo(packet_queue);
 }
 
 /*
