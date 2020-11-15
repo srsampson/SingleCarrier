@@ -64,6 +64,11 @@ https://unsigned.io/projects/reticulum/
 
 Well anyway, sometimes TCP/IP is overkill. We normally just want to transport data, and in most cases only locally, and not worldwide.
 
+#### Notes
+You can also use the ```-v``` option of ```tncattach``` to see some debug activity. Also, you can run ```wireshark``` on the ```tnc0``` interface and watch the TCP/IP packets.
+
+Sometimes the ```qpsk``` program gets a segmentation violation when tncattach is started. I haven't found where this is, but I suspect it is in the queue code.
+
 #### Receive Side
 I haven't done any debugging on the receive side yet.
 
