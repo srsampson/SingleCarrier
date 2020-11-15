@@ -64,6 +64,10 @@ https://unsigned.io/projects/reticulum/
 
 Well anyway, sometimes TCP/IP is overkill. We normally just want to transport data, and in most cases only locally, and not worldwide.
 
+Here's what the spectrum looks like, with a 1100 Hz center frequency:
+
+![My image](modem/docs/spectrum.png)
+
 #### Notes
 You can also use the ```-v``` option of ```tncattach``` to see some debug activity. Also, you can run ```wireshark``` on the ```tnc0``` interface and watch the TCP/IP packets.
 
