@@ -25,7 +25,7 @@ $ padsp ./qpsk
 ```
 This starts the program which runs in a loop looking for either soundcard audio, or pseudo-terminal input.
 
-This requires ax25-tools to be loaded, as well as:
+This requires osspd to be loaded, as well:
 ```
 sudo apt-get install osspd
 ```
