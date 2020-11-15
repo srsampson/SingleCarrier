@@ -33,7 +33,6 @@ The latter creates a /dev/dsp device for simple modem control.
 #### Transmit Side
 When you run the program it should output:
 ```
-Pseudo Terminal to connect with: /dev/pts/1
 Sound write sample size 16
 Sound read sample size 16
 Number of write channels 1
