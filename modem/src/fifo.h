@@ -47,8 +47,8 @@ typedef enum
 
 typedef struct
 {
-    int head_pointer;
-    int tail_pointer;
+    int    head_pointer;
+    int    tail_pointer;
 
     size_t length; /* Number of items on the queue    */
     size_t max_length; /* Maximum offset into queue array */
@@ -58,10 +58,11 @@ typedef struct
     DBlock **queue;
 } Queue;
 
+Queue *create_fifo(size_t);
 void fifo_destroy(Queue *);
+
 void push_fifo(Queue *, DBlock [], int);
 DBlock *pop_fifo(Queue *);
-Queue *create_fifo(size_t);
 
 #ifdef __cplusplus
 }

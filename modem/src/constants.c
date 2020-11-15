@@ -50,6 +50,8 @@ const int8_t pilotvalues[] = {
 /*
  * Created with Octave:
  * hs = gen_rn_coeffs(.35, 1.0/8000.0, 1600, 10, 5);
+ * 
+ * First coefficient deleted to make odd/symmetrical
  */
 const float alpha35_root[] = {
     -0.00024537f,

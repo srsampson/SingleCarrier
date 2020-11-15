@@ -105,6 +105,8 @@ DBlock *pop_fifo(Queue *queue) {
     
     if (queue->head_pointer == queue->tail_pointer) {
         queue->state = FIFO_EMPTY;
+    } else {
+        queue->state = FIFO_DATA;
     }
 
     return item;

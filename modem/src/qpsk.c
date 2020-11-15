@@ -242,21 +242,21 @@ int main(int argc, char **argv) {
          */
         //ptt_poll();
         
-        sleep(1);   // Allow network threads some time
+        usleep(10000);   // Allow network threads some time
     }
 
     packet_destroy();   // Also destroys...
     network_destroy();  // ...fifo queues
 
-    close(mcb.fd); // Sound descriptor
-    //close(mcb.td); // PTT descriptor
+    close(mcb.fd);      // Sound descriptor
+    //close(mcb.td);      // PTT descriptor
     
     return 0;
 }
 
 // Functions
 
-int16_t getAudioPeak() {
+int16_t qpsk_get_audio_peak() {
     return peak;
 }
 
@@ -705,7 +705,7 @@ static void preloadFlush() {
  * Construct a transmit packet of count octets
  * from the reference data packet
  */
-void tx_packet(DBlock **packet, int count) {
+void qpsk_tx_packet(DBlock **packet, int count) {
     mcb.sample_count = 0;
 
     sendPilots();

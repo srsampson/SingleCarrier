@@ -1,4 +1,3 @@
-#define DEBUG
 /*---------------------------------------------------------------------------*\
 
   FILE........: network.c
@@ -25,8 +24,8 @@
   along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#define _XOPEN_SOURCE 600
 #define _DEFAULT_SOURCE
+#define _XOPEN_SOURCE 600
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -104,7 +103,7 @@ static void *socketReadThread(void *arg) {
             running = false;
             break;
         } else if (count < 0) {
-            sleep(1);
+            usleep(10000);
         } else {
             /*
              * Process data if we have at least one character
@@ -210,7 +209,7 @@ static void *transmitThread(void *arg) {
                 while ((inblock[loop] = pop_fifo(network_queue)) != NULL)
                     loop++;
 
-                tx_packet(inblock, loop);
+                qpsk_tx_packet(inblock, loop);
             }
             
             pthread_mutex_unlock(&network_lock);
@@ -219,7 +218,7 @@ static void *transmitThread(void *arg) {
         
       
         
-        sleep(1);
+        usleep(10000);
     }
 
     pthread_exit(NULL);
@@ -282,7 +281,7 @@ static void *socketWriteThread(void *arg) {
             send(mcb.sockfd, frame, 1, 0);
         }
         
-        sleep(1);
+        usleep(10000);
     }
     
     pthread_exit(NULL);
