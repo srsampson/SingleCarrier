@@ -58,12 +58,6 @@ I'm  It uses a TCP/IP port for a virtual KISS interface. Also, you don't need th
 
 https://unsigned.io/ethernet-and-ip-over-packet-radio-tncs/
 
-Mark also has a Python 3 tool called ```Reticulum``` which looks like a pretty neat multi-hop networking application. While it was designed to be a secure network, he says it can also operate in several encryptionless modes.
-
-https://unsigned.io/projects/reticulum/
-
-Well anyway, sometimes TCP/IP is overkill. We normally just want to transport data, and in most cases only locally, and not worldwide.
-
 Here's what the spectrum looks like, with a 1100 Hz center frequency:
 
 <img src="modem/docs/spectrum.png" width="200">
