@@ -21,10 +21,8 @@
 // Prototypes
 
 static float cnormf(complex float);
-static void freq_shift(complex float [], complex float [], int, int, float, complex float);
 static float correlate_pilots(complex float [], int);
 static float magnitude_pilots(complex float [], int);
-static void receive_end(void);
 
 // Externals
 
@@ -52,8 +50,6 @@ static complex float fbb_tx_rect;
 
 static complex float fbb_rx_phase;
 static complex float fbb_rx_rect;
-
-static complex float rx_timing = FINE_TIMING_OFFSET;  // estimated
 
 #ifdef DEBUG
     int pilot_frames_detected = 0;
@@ -95,34 +91,6 @@ static float magnitude_pilots(complex float symbol[], int index) {
 }
 
 /*
- * Useful for operator offset of receiver fine tuning
- */
-static void freq_shift(complex float out[], complex float in[], int index,
-        int length, float fshift, complex float phase_rect) {
-
-    complex float foffset_rect = cmplx(TAU * fshift / FS);
-    
-    /*
-     * Use a copy of the receive data to leave it alone
-     * for other algorithms (Probably not needed).
-     */
-    complex float *copy = (complex float *) calloc(sizeof (complex float), length);
-
-    for (int i = index, j = 0; i < length; i++, j++) {
-        copy[j] = in[index];
-    }
-
-    for (int i = 0; i < length; i++) {
-        phase_rect *= foffset_rect;
-        out[i] = copy[i] * phase_rect;
-    }
-
-    free(copy);
-
-    phase_rect /= cabsf(phase_rect); // normalize as magnitude can drift
-}
-
-/*
  * Receive function
  * 
  * Basically we receive a 1600 baud QPSK at 8000 samples/sec.
@@ -131,8 +99,6 @@ static void freq_shift(complex float out[], complex float in[], int index,
  * This is (33 * 5) = 165 + (31 * 5 * 8) = 1240 or 1405 samples per packet
  */
 void rx_frame(int16_t in[], int bits[], FILE *fout) {
-    complex float fourth = (1.0f / 4.0f);
-
     /*
      * Convert input PCM to complex samples
      * Translate to baseband at an 8 kHz sample rate
@@ -160,14 +126,7 @@ void rx_frame(int16_t in[], int bits[], FILE *fout) {
 	int extended = (FRAME_SIZE / CYCLES) + i;  // compute once
 
         decimated_frame[i] = decimated_frame[extended];
-        decimated_frame[extended] = input_frame[(i * CYCLES) + (int) roundf(rx_timing)];
-
-        /*
-         * Compute the phase error
-         */
-        float phase_error = cargf(cpowf(decimated_frame[extended], 4.0f) * fourth); // division is slow
-
-        rx_timing = fabsf(phase_error); // only positive
+        decimated_frame[extended] = input_frame[(i * CYCLES) + FINE_TIMING_OFFSET];
 
 #ifdef TEST_SCATTER
         fprintf(stderr, "%f %f\n", crealf(decimated_frame[extended]), cimagf(decimated_frame[extended]));
@@ -219,13 +178,6 @@ void rx_frame(int16_t in[], int bits[], FILE *fout) {
 }
 
 /*
- * Dead man switch to state end
- */
-static void receive_end() {
-    state = hunt;
-}
-
-/*
  * Gray coded QPSK modulation function
  * 
  *      Q
@@ -233,8 +185,6 @@ static void receive_end() {
  * -I---+---I
  *      |
  *     -Q
- * 
- * The symbols are not rotated on transmit
  */
 complex float qpsk_mod(int bits[]) {
     return constellation[(bits[1] << 1) | bits[0]];
@@ -258,8 +208,10 @@ complex float qpsk_mod(int bits[]) {
  * Each bit pair differs from the next by only one bit.
  */
 void qpsk_demod(complex float symbol, int bits[]) {
-    bits[0] = crealf(symbol) < 0.0f; // I < 0 ?
-    bits[1] = cimagf(symbol) < 0.0f; // Q < 0 ?
+    complex float rotate = symbol * cmplx(ROT45);
+    
+    bits[0] = crealf(rotate) < 0.0f; // I < 0 ?
+    bits[1] = cimagf(rotate) < 0.0f; // Q < 0 ?
 }
 
 /*
@@ -301,7 +253,7 @@ int tx_frame(int16_t samples[], complex float symbol[], int length) {
      * Now return the resulting real samples
      */
     for (int i = 0; i < (length * CYCLES); i++) {
-        samples[i] = (int16_t) ((crealf(signal[i]) + cimagf(signal[i])) * 16384.0f); // @ .5
+        samples[i] = (int16_t) (crealf(signal[i]) * 16384.0f); // @ .5
     }
 
     return (length * CYCLES);
