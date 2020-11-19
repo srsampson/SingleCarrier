@@ -30,11 +30,22 @@
 // Externals
 
 extern const float alpha35_root[];
+extern const float alpha50_root[];
+
+// Locals
+
+static const float *coeff;
 
 /*
  * FIR Filter with specified impulse length used at 8 kHz
  */
-void fir(complex float memory[], complex float sample[], int length) {
+void fir(complex float memory[], bool choice, complex float sample[], int length) {
+    if (choice == true) {
+        coeff = alpha50_root;
+    } else {
+        coeff = alpha35_root;
+    }
+
     for (int j = 0; j < length; j++) {
         for (int i = 0; i < (NTAPS - 1); i++) {
             memory[i] = memory[i + 1];
@@ -45,7 +56,7 @@ void fir(complex float memory[], complex float sample[], int length) {
         complex float y = 0.0f;
 
         for (int i = 0; i < NTAPS; i++) {
-            y += (memory[i] * alpha35_root[i]);
+            y += (memory[i] * coeff[i]);
         }
 
         sample[j] = y * GAIN;

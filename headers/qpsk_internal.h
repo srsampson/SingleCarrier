@@ -40,10 +40,6 @@ extern "C"
 #define TX_FILENAME "/tmp/spectrum-filtered.raw"
 
 /*
- * initial timing estimate derived
- */
-#define FINE_TIMING_OFFSET 8
-/*
  * Redundant calculation
  */
 #define FOURTH (1.0f / 4.0f)

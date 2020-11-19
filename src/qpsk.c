@@ -23,7 +23,6 @@
 
 static float cnormf(complex float);
 static float correlate_pilots(complex float [], int);
-static float magnitude_pilots(complex float [], int);
 static float find_quadrant_and_distance(int *, complex float);
 static void rx_frame(int16_t [], int []);
 
@@ -60,7 +59,14 @@ static complex float fbb_tx_rect;
 static complex float fbb_rx_phase;
 static complex float fbb_rx_rect;
     
-static int rx_timing = FINE_TIMING_OFFSET;
+static int rx_timing;
+
+/*
+ * Select which FIR coefficients
+ * true = alpha50_root
+ * false = alpha35_root
+ */
+static bool alpha50 = false;
 
 // Defines
 
@@ -69,7 +75,7 @@ static int rx_timing = FINE_TIMING_OFFSET;
  */
 #define FOFFSET 0.0f
 
-#ifdef DEBUG
+#ifdef DEBUG2
     int pilot_frames_detected = 0;
 #endif
 
@@ -84,6 +90,9 @@ static float cnormf(complex float val) {
 
 /*
  * Sliding Window
+ *
+ * Returns the mean magnitude of the
+ * underlying pilot symbols in window
  */
 static float correlate_pilots(complex float symbol[], int index) {
     complex float out = 0.0f;
@@ -93,19 +102,6 @@ static float correlate_pilots(complex float symbol[], int index) {
     }
 
     return cnormf(out);
-}
-
-/*
- * Save time, skip sqrt()
- */
-static float magnitude_pilots(complex float symbol[], int index) {
-    float out = 0.0f;
-
-    for (int i = index; i < (PILOT_SYMBOLS + index); i++) {
-        out += cnormf(symbol[i]);
-    }
-    
-    return out;
 }
 
 /*
@@ -135,7 +131,7 @@ static void rx_frame(int16_t in[], int bits[]) {
     /*
      * Raised Root Cosine Filter
      */
-    fir(rx_filter, input_frame, FRAME_SIZE);
+    fir(rx_filter, alpha50, input_frame, FRAME_SIZE);
 
     /*
      * Decimate by 5 to the 1600 symbol rate
@@ -144,13 +140,7 @@ static void rx_frame(int16_t in[], int bits[]) {
 	int extended = (FRAME_SIZE / CYCLES) + i;  // compute once
 
         decimated_frame[i] = decimated_frame[extended];
-	decimated_frame[extended] = input_frame[(i * CYCLES) + rx_timing];
-
-#if defined(POWER4)
-	// text book
-	float shift = fabsf(cargf(cpowf(decimated_frame[extended], 4.0f) * FOURTH));
-        rx_timing = (int) roundf(shift);
-#endif
+        decimated_frame[extended] = input_frame[(i * CYCLES) + rx_timing];
     }
 
 #ifdef COSTAS
@@ -179,11 +169,10 @@ static void rx_frame(int16_t in[], int bits[]) {
     }
 #endif
     
-    /* Hunting for the pilot preamble sequence */
+    /* Hunting for the pilot as a preamble sequence */
 
     float temp_value = 0.0f;
     float max_value = 0.0f;
-    float mean = 0.0f;
     int max_index = 0;
 
     for (int i = 0; i < ((FRAME_SIZE / CYCLES) / 2); i++) {
@@ -192,35 +181,22 @@ static void rx_frame(int16_t in[], int bits[]) {
 #else
         temp_value = correlate_pilots(decimated_frame, i);
 #endif
-
         if (temp_value > max_value) {
             max_value = temp_value;
             max_index = i;
         }
     }
 
-    /*
-     * Educate the decimator with the correlation
-     */
-    if (max_index != 0) {
+    if (max_value > 280.0f) {
+        /*
+         * Educate the decimator with the correlation
+         */
         rx_timing = max_index;
-    }
-
-#ifdef DEBUG3
-    printf("%d ", rx_timing);
-#endif
     
-#if defined(COSTAS)
-    mean = magnitude_pilots(costas_frame, max_index);
-#else
-    mean = magnitude_pilots(decimated_frame, max_index);
-#endif
-
-    if (max_value > (mean * 30.0f)) {
 #ifdef DEBUG2
         pilot_frames_detected++;
         printf("Frames: %d MaxIdx: %d MaxVal: %.2f Mean: %.2f\n",
-                pilot_frames_detected, max_index, max_value, mean);
+            pilot_frames_detected, max_index, max_value, mean);
 #endif
 
         for (int i = 0, j = max_index; j < (PILOT_SYMBOLS + max_index); i++, j++) {
@@ -245,7 +221,7 @@ static void rx_frame(int16_t in[], int bits[]) {
          */
         state = hunt;
     }
-}
+ }
 
 /*
  * Gray coded QPSK modulation function
@@ -305,8 +281,9 @@ int tx_frame(int16_t samples[], complex float symbol[], int length) {
 
     /*
      * Root Cosine Filter
+     * true = 50% rolloff, false = 35% rolloff
      */
-    fir(tx_filter, signal, (length * CYCLES));
+    fir(tx_filter, alpha50, signal, (length * CYCLES));
 
     /*
      * Shift Baseband to Center Frequency
@@ -394,7 +371,7 @@ int main(int argc, char** argv) {
     fbb_tx_phase = cmplx(0.0f);
     fbb_tx_rect = cmplx(TAU * CENTER / FS);
 
-    for (int k = 0; k < 50; k++) {
+    for (int k = 0; k < 500; k++) {
         // 33 BPSK pilots
         length = bpsk_modulate(frame);
 

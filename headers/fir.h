@@ -35,7 +35,7 @@ extern "C" {
 #define NTAPS           50
 #define GAIN            2.2f
 
-void fir(complex float [], complex float [], int);
+void fir(complex float [], bool, complex float [], int);
 
 #ifdef __cplusplus
 }
