@@ -39,6 +39,15 @@ extern "C"
 
 #define TX_FILENAME "/tmp/spectrum-filtered.raw"
 
+/*
+ * initial timing estimate derived
+ */
+#define FINE_TIMING_OFFSET 8
+/*
+ * Redundant calculation
+ */
+#define FOURTH (1.0f / 4.0f)
+
 #define FS              8000.0f
 #define RS              1600.0f
 #define TS              (1.0f / RS)
@@ -90,3 +99,4 @@ typedef enum
 #ifdef __cplusplus
 }
 #endif
+

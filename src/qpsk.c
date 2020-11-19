@@ -1,5 +1,3 @@
-#define DEBUG1
-
 /*
  * qpsk.c
  *
@@ -45,8 +43,11 @@ static complex float tx_filter[NTAPS];
 static complex float rx_filter[NTAPS];
 static complex float input_frame[(FRAME_SIZE * 2)];
 static complex float decimated_frame[562];
+
+#if defined(COSTAS)
 static complex float costas_frame[562];
 static complex float freq_frame[562];
+#endif
 
 static complex float pilot_table[PILOT_SYMBOLS];
 static complex float rx_pilot[PILOT_SYMBOLS];
@@ -59,6 +60,15 @@ static complex float fbb_tx_rect;
 static complex float fbb_rx_phase;
 static complex float fbb_rx_rect;
     
+static int rx_timing = FINE_TIMING_OFFSET;
+
+// Defines
+
+/*
+ * Experimental RX Frequency Offset from TX
+ */
+#define FOFFSET 0.0f
+
 #ifdef DEBUG
     int pilot_frames_detected = 0;
 #endif
@@ -107,9 +117,6 @@ static float magnitude_pilots(complex float symbol[], int index) {
  * This is (33 * 5) = 165 + (31 * 5 * 8) = 1240 or 1405 samples per packet
  */
 static void rx_frame(int16_t in[], int bits[]) {
-    complex float fourth = (1.0f / 4.0f);
-    int rx_timing = 3;
-    
     /*
      * Convert input PCM to complex samples
      * Translate to baseband at an 8 kHz sample rate
@@ -133,26 +140,24 @@ static void rx_frame(int16_t in[], int bits[]) {
     /*
      * Decimate by 5 to the 1600 symbol rate
      */
-    int dec_frame = (FRAME_SIZE / CYCLES);  // compute once
-
-    /*
-     * Obviously the empty first frame is going to have
-     * the largest timing offset error
-     */
-    for (int i = 0; i < dec_frame; i++) {
-	int extended = dec_frame + i;  // compute once
+    for (int i = 0; i < (FRAME_SIZE / CYCLES); i++) {
+	int extended = (FRAME_SIZE / CYCLES) + i;  // compute once
 
         decimated_frame[i] = decimated_frame[extended];
 	decimated_frame[extended] = input_frame[(i * CYCLES) + rx_timing];
 
-	float shift = fabsf(cargf(cpowf(decimated_frame[extended], 4.0f) * fourth));
+#if defined(POWER4)
+	// text book
+	float shift = fabsf(cargf(cpowf(decimated_frame[extended], 4.0f) * FOURTH));
         rx_timing = (int) roundf(shift);
+#endif
     }
 
+#ifdef COSTAS
     /*
      * Correct for phase and frequency offset
      */
-    costas(dec_frame, decimated_frame, costas_frame, freq_frame);    
+    costas((FRAME_SIZE / CYCLES), decimated_frame, costas_frame, freq_frame);    
 
     float nco = get_freq();
     float phase = get_phase();
@@ -161,15 +166,19 @@ static void rx_frame(int16_t in[], int bits[]) {
     printf("%.4f, %.4f,\n", nco, phase);
 #endif
 
-    for (int i = 0; i < dec_frame; i++) {
 #ifdef TEST_SCATTER
+    for (int i = 0; i < (FRAME_SIZE / CYCLES); i++) {
         fprintf(stderr, "%f %f\n", crealf(costas_frame[i]), cimagf(costas_frame[i]));
-#endif 
-#ifdef TEST_SCATTER1
-        fprintf(stderr, "%f %f\n", crealf(decimated_frame[i]), cimagf(decimated_frame[i]));
-#endif 
+#endif
     }
-
+#endif
+    
+#if !defined(COSTAS) && defined(TEST_SCATTER)
+    for (int i = 0; i < (FRAME_SIZE / CYCLES); i++) {
+        fprintf(stderr, "%f %f\n", crealf(decimated_frame[i]), cimagf(decimated_frame[i]));
+    }
+#endif
+    
     /* Hunting for the pilot preamble sequence */
 
     float temp_value = 0.0f;
@@ -178,7 +187,11 @@ static void rx_frame(int16_t in[], int bits[]) {
     int max_index = 0;
 
     for (int i = 0; i < ((FRAME_SIZE / CYCLES) / 2); i++) {
+#if defined(COSTAS)
         temp_value = correlate_pilots(costas_frame, i);
+#else
+        temp_value = correlate_pilots(decimated_frame, i);
+#endif
 
         if (temp_value > max_value) {
             max_value = temp_value;
@@ -186,7 +199,22 @@ static void rx_frame(int16_t in[], int bits[]) {
         }
     }
 
+    /*
+     * Educate the decimator with the correlation
+     */
+    if (max_index != 0) {
+        rx_timing = max_index;
+    }
+
+#ifdef DEBUG3
+    printf("%d ", rx_timing);
+#endif
+    
+#if defined(COSTAS)
     mean = magnitude_pilots(costas_frame, max_index);
+#else
+    mean = magnitude_pilots(decimated_frame, max_index);
+#endif
 
     if (max_value > (mean * 30.0f)) {
 #ifdef DEBUG2
@@ -199,7 +227,11 @@ static void rx_frame(int16_t in[], int bits[]) {
             /*
              * Save the pilots for the coherent process
              */
+#if defined(COSTAS)
             rx_pilot[i] = costas_frame[j];
+#else
+            rx_pilot[i] = decimated_frame[j];
+#endif
         }
         
         /*
@@ -296,11 +328,11 @@ int tx_frame(int16_t samples[], complex float symbol[], int length) {
     return (length * CYCLES);
 }
 
-int bpsk_pilot_modulate(int16_t samples[]) {
+int bpsk_modulate(int16_t samples[]) {
     return tx_frame(samples, pilot_table, PILOT_SYMBOLS);
 }
 
-int qpsk_data_modulate(int16_t samples[], int tx_bits[], int length) {
+int qpsk_modulate(int16_t samples[], int tx_bits[], int length) {
     complex float symbol[length];
     int dibit[2];
 
@@ -323,6 +355,7 @@ int main(int argc, char** argv) {
 
     srand(time(0));
 
+#if defined(COSTAS)
     /*
      * Experiment with this BW number
      */
@@ -342,7 +375,8 @@ int main(int argc, char** argv) {
     float min_freq = -.25f;
 
     costas_create(alpha, beta, max_freq, min_freq);
-
+#endif
+    
     /*
      * Create a complex table of pilot values
      * for the correlation algorithm
@@ -362,7 +396,7 @@ int main(int argc, char** argv) {
 
     for (int k = 0; k < 50; k++) {
         // 33 BPSK pilots
-        length = bpsk_pilot_modulate(frame);
+        length = bpsk_modulate(frame);
 
         fwrite(frame, sizeof (int16_t), length, fout);
 
@@ -376,7 +410,7 @@ int main(int argc, char** argv) {
                 bits[i + 1] = rand() % 2;
             }
 
-            length = qpsk_data_modulate(frame, bits, DATA_SYMBOLS);
+            length = qpsk_modulate(frame, bits, DATA_SYMBOLS);
 
             fwrite(frame, sizeof (int16_t), length, fout);
         }
@@ -390,7 +424,7 @@ int main(int argc, char** argv) {
     fin = fopen(TX_FILENAME, "rb");
 
     fbb_rx_phase = cmplx(0.0f);
-    fbb_rx_rect = cmplx(TAU * (-CENTER + 1.0f) / FS);
+    fbb_rx_rect = cmplx(TAU * (-CENTER + FOFFSET) / FS);
 
     while (1) {
         /*
