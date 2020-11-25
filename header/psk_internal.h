@@ -49,7 +49,7 @@ extern "C" {
 
 #define TAU                          (M_PI * 2.0f)
 
-    /*
+/*
  * This method is much faster than using cexp()
  * float_value - must be a float
  */
@@ -80,7 +80,7 @@ extern "C" {
 
 #define TAPS                         49
 
-/* Data Elements combined into a shared memory structure */
+/* Data Elements combined into a memory structure */
     
 struct PSK {
     complex float m_txFilterMemory[PSK_NSYM];
