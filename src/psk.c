@@ -136,6 +136,9 @@ int pskCreate() {
 
     psk = (struct PSK *) malloc(sizeof(struct PSK));
     
+    if (psk == NULL)
+        return 1;
+
     /* Initialize Transmit and Receive Side */
 
     psk->m_carrier = cmplx(TAU * PSK_CENTER / PSK_FS);
