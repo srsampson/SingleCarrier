@@ -128,9 +128,7 @@ const float gtAlpha5Root[] = {
     0.002040776f
 };
 
-// Locals
-
-static struct PSK *psk;
+struct PSK *psk;
 
 // Functions
 
