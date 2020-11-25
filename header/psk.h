@@ -38,7 +38,7 @@ struct PSK;
 
 /*
  * Functions to start and stop modem
- * Create returns -1 on shared memory failure
+ * Create returns -1 on memory failure
  * returns 0 if no errors
  */
 
