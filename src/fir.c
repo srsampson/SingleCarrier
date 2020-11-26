@@ -24,7 +24,6 @@
   along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "psk_internal.h"
 #include "fir.h"
 
 // Globals

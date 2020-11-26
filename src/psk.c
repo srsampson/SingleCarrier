@@ -5,6 +5,7 @@
   DATE CREATED: November 2020
 
   A 1600 baud QPSK voice modem library
+
 \*---------------------------------------------------------------------------*/
 /*
   Copyright (C) 2020 David Rowe
@@ -24,27 +25,23 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <assert.h>
 #include <stdint.h>
-#include <string.h>
-#include <math.h>
 
 #include "psk_internal.h"
 
 // Globals
 
+struct PSK *psk;
 const char copyright[] = "Copyright (C) 2020 David Rowe\r\nGNU LGPL 2.1 License\r\n";
+complex float fcenter;
+complex float pilots[PSK_PILOT_SYMBOLS_PER_FRAME];
+complex phaseRx;
+complex phaseTx;
 
 /*
  * QPSK Constellation - Gray Code
- * 
- *         Q 01
- *         |
- * 11 -I---+---I 00
- *         |
- *        -Q 10
- * 
- * The symbols are not rotated on transmit
  */
 const complex float constellation[] = {
      1.0f + 0.0f * I,
@@ -53,55 +50,47 @@ const complex float constellation[] = {
     -1.0f + 0.0f * I
 };
 
+// Locals
+
 /*
  * Same number of pilots as data symbols
  */
-const int8_t pilots[] = {
+static const int8_t pilotvalues[] = {
     -1,  1,  1, -1, -1, -1,  1, -1,
      1, -1,  1,  1,  1,  1,  1,  1,
      1,  1, -1, -1,  1, -1,  1, -1,
      1,  1,  1,  1,  1,  1, -1
 };
 
-/*
- * Linear Regression X point values.
- * 0,1 for start, and 29,30 for end.
- * Algorithm will fit the rest.
- */
-const int samplingPoints[] = {
-    0, 1, 29, 30
-};
-
-struct PSK *psk;
-
 // Functions
 
 int psk_create() {
+    // Initialize to all zero
+    if ((psk = (struct PSK *) calloc(1, sizeof(struct PSK))) == NULL) {
+        // Return failure
+        return 0;
+    }
 
-    psk = (struct PSK *) calloc(1, sizeof(struct PSK));
+    // Initialize Transmit and Receive phases
+
+    fcenter = cmplx(TAU * PSK_CENTER / PSK_FS);
     
-    if (psk == NULL)
-        return 1;
-
-    /* Initialize Transmit and Receive Side */
-
-    psk->m_carrier = cmplx(TAU * PSK_CENTER / PSK_FS);
-    
-    psk->m_phaseTx = cmplx(0.0f);
-    psk->m_phaseRx = cmplx(0.0f);
+    phaseTx = cmplx(0.0f);
+    phaseRx = cmplx(0.0f);
 
     /*
      * Initialize the pilot phases
      * Same number of pilots as data
      */
-    for (int i = 0; i < MOD_SYMBOLS; i++) {
-        psk->m_pilots[i] = (float) pilots[i] + 0.0 * I; // I + j0
+    for (int i = 0; i < PSK_SYMBOLS; i++) {
+        pilots[i] = (float) pilotvalues[i] + 0.0 * I; // I + j0
     }
 
-    psk->m_nin = PSK_M;
+    psk->m_nin = PSK_CYCLES;
     psk->m_clip = 1;    // clip TX waveform
 
-    return 0;
+    // Return success
+    return 1;
 }
 
 void psk_destroy() {

@@ -32,6 +32,9 @@ extern "C" {
 
 #include <complex.h>
 
+#define NTAPS           49
+#define GAIN            2.2f
+    
 void fir(complex float [], complex float [], int);
 
 #ifdef __cplusplus

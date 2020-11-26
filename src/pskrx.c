@@ -5,6 +5,7 @@
   DATE CREATED: November 2020
 
   A 1600 baud QPSK voice modem library
+
 \*---------------------------------------------------------------------------*/
 /*
   Copyright (C) 2020 David Rowe
@@ -22,16 +23,25 @@
   You should have received a copy of the GNU Lesser General Public License
   along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
-#include <complex.h>
-#include <stdint.h>
 
 #include "psk_internal.h"
+#include "fir.h"
 
 // Externals
 
 extern struct PSK *psk;
-extern const int samplingPoints[];
-extern const float alpha50_root[];
+extern complex float pilots[];
+extern complex float fcenter;
+extern complex phaseRx;
+extern float alpha50_root[];
+
+// Defines
+
+#define PSK_NFILTER  (6 * PSK_M)
+#define NT           5
+#define NSW          4
+#define P            4
+#define SCALE        8192.0f
 
 // Prototypes
 
@@ -48,6 +58,32 @@ static void syncStateMachine(int, int *);
 static float rxEstimatedTiming(complex float [], complex float [], int);
 static void linearRegression(complex float *, complex float *, float [], complex float []);
 
+// Locals
+
+static complex float rx_filter[NTAPS];
+static complex float rxSymb[PSK_SYMBOLS];
+static complex float ctSymbBuf[PSK_SYMBOL_BUF];
+static complex float ctFrameBuf[PSK_SYMBOL_BUF];
+static complex float chFrameBuf[PSK_FRAME * PSK_CYCLES];
+static complex float prevRxSymbols;
+static complex float rxFilterMemory[PSK_NFILTER];
+static complex float rxFilterMemTiming[NT * P];
+static float pskPhase[PSK_SYMBOLS];
+static float freqOffsetFiltered;
+static float rxTiming;
+static float ratio;
+static int sampleCenter;
+static int syncTimer;
+
+/*
+ * Linear Regression X point values.
+ * 0,1 for start, and 29,30 for end.
+ * Algorithm will fit the rest.
+ */
+const int samplingPoints[] = {
+    0, 1, 29, 30
+};
+
 // Functions
 
 /*
@@ -56,21 +92,21 @@ static void linearRegression(complex float *, complex float *, float [], complex
  * and a sync indication
  */
 int receive(uint8_t packed_codec_bits[], complex float signal[]) {
-    int bitPairs[PSK_BITS_PER_FRAME];
-    int nin = PSK_SYMBOLS_PER_FRAME;
+    int bitPairs[PSK_DATA_BITS_PER_FRAME];
+    int nin = PSK_DATA_SYMBOLS_PER_FRAME;
     int sync;
 
     /*
      * Drop the user-level amplitude
      */
     for (int i = 0; i < nin; i++) {
-        signal[i] /= MODEM_SCALE;
+        signal[i] /= SCALE;
     }
 
     demodulate(bitPairs, &sync, signal, &nin);
 
-    if (sync == 1) {
-        for (int j = 0, k = 0; j < PSK_BITS_PER_FRAME; j += (PSK_BITS_PER_FRAME / 2), k += 4) { /* 0, 28 */
+    if (sync) {
+        for (int j = 0, k = 0; j < PSK_DATA_BITS_PER_FRAME; j += (PSK_DATA_BITS_PER_FRAME / 2), k += 4) { /* 0, 28 */
             int bit = 7;
             int nbyte = 0;
 
@@ -78,7 +114,7 @@ int receive(uint8_t packed_codec_bits[], complex float signal[]) {
                 packed_codec_bits[k + i] = 0;
             }
 
-            for (int i = 0; i < (PSK_BITS_PER_FRAME / 2); i++) { /* 0..28 */
+            for (int i = 0; i < (PSK_DATA_BITS_PER_FRAME / 2); i++) { /* 0..28 */
                 packed_codec_bits[nbyte + k] |= ((bitPairs[j + i] & 0x01) << bit);
                 bit--;
                 if (bit < 0) {
@@ -101,7 +137,7 @@ int receive(uint8_t packed_codec_bits[], complex float signal[]) {
  * @param nin_frame a pointer to an integer containing the new frame size
  */
 static void demodulate(int bitPairs[], int *sync_good, complex float signal[], int *nin_frame) {
-    complex float ch_symb[NSW * PILOTDATA_SYMBOLS];
+    complex float ch_symb[PSK_FRAME];
     int anextSync;
 
     int lsync = psk->m_sync; /* get a starting value */
@@ -113,18 +149,18 @@ static void demodulate(int bitPairs[], int *sync_good, complex float signal[], i
      *
      * First move the old samples to the left.
      */
-    for (int i = 0; i < (NSW * PILOTDATA_SYMBOLS * PSK_M - *nin_frame); i++) {
-        psk->m_chFrameBuf[i] = psk->m_chFrameBuf[i + *nin_frame];
+    for (int i = 0; i < (PSK_FRAME - *nin_frame); i++) {
+        chFrameBuf[i] = chFrameBuf[i + *nin_frame];
     }
 
     /*
      * Now add in the new samples.
      */
-    for (int i = 0; i < (NSW * PILOTDATA_SYMBOLS * PSK_M); i++) {
-        psk->m_chFrameBuf[i] = signal[i];
+    for (int i = 0; i < PSK_FRAME; i++) {
+        chFrameBuf[i] = signal[i];
     }
 
-    if (lsync == 0) {
+    if (!lsync) {
         /*
          * OK, we are not in sync, so we will
          * move the center frequency around and see if we
@@ -136,67 +172,67 @@ static void demodulate(int bitPairs[], int *sync_good, complex float signal[], i
 
         for (int i = -40; i <= 40; i += 40) { // Don't use float in loops */
             psk->m_freqEstimate = PSK_CENTER + (float) i;
-            receiveProcessor(ch_symb, psk->m_chFrameBuf, (NSW * PILOTDATA_SYMBOLS), PSK_M, 0);
+            receiveProcessor(ch_symb, chFrameBuf, PSK_FRAME, PSK_CYCLES, 0);
 
             for (int j = 0; j < NSW - 1; j++) {
-                updateCtSymbolBuffer(ch_symb, (PILOTDATA_SYMBOLS * j));
+                updateCtSymbolBuffer(ch_symb, (PSK_FRAME * j));
             }
 
-            frameSyncFineFreqEstimate(ch_symb, ((NSW - 1) * PILOTDATA_SYMBOLS), lsync, &anextSync);
+            frameSyncFineFreqEstimate(ch_symb, PSK_FRAME, lsync, &anextSync);
 
-            if (anextSync == 1) {
-                if (psk->m_ratio > maxRatio) {
-                    maxRatio = psk->m_ratio;
+            if (anextSync) {
+                if (ratio > maxRatio) {
+                    maxRatio = ratio;
                     freqEstimate = (psk->m_freqEstimate - psk->m_freqFineEstimate);
                     nextSync = anextSync;
                 }
             }
         }
 
-        if (nextSync == 1) {
+        if (nextSync) {
             psk->m_freqEstimate = freqEstimate;
-            receiveProcessor(ch_symb, psk->m_chFrameBuf, (NSW * PILOTDATA_SYMBOLS), PSK_M, 0);
+            receiveProcessor(ch_symb, chFrameBuf, PSK_FRAME, PSK_CYCLES, 0);
 
             for (int i = 0; i < NSW - 1; i++) {
-                updateCtSymbolBuffer(ch_symb, (i * PILOTDATA_SYMBOLS));
+                updateCtSymbolBuffer(ch_symb, (i * PSK_FRAME));
             }
 
-            frameSyncFineFreqEstimate(ch_symb, ((NSW - 1) * PILOTDATA_SYMBOLS), lsync, &nextSync);
+            frameSyncFineFreqEstimate(ch_symb, ((NSW - 1) * PSK_FRAME), lsync, &nextSync);
 
             if (fabsf(psk->m_freqFineEstimate) > 2.0f) {
                 nextSync = 0;
             }
         }
 
-        if (nextSync == 1) {
+        if (nextSync) {
             /*
              * We are in sync finally
              */
-            for (int r = 0; r < NCT_SYMB_BUF; r++) {
-                psk->m_ctFrameBuf[r] = psk->m_ctSymbBuf[psk->m_sampleCenter + r];
+            for (int r = 0; r < PSK_SYMBOL_BUF; r++) {
+                ctFrameBuf[r] = ctSymbBuf[sampleCenter + r];
             }
         }
-    } else if (lsync == 1) {
+    } else if (lsync) {
         /*
          * Good deal, we were already in sync
          * so we can skip searching for the center frequency
          * Much less CPU now.
          */
-        receiveProcessor(ch_symb, signal, PILOTDATA_SYMBOLS, psk->m_nin, 1);
+        receiveProcessor(ch_symb, signal, PSK_FRAME, psk->m_nin, 1);
         frameSyncFineFreqEstimate(ch_symb, 0, lsync, &nextSync);
 
         for (int r = 0; r < 2; r++) {
-            psk->m_ctFrameBuf[r] = psk->m_ctFrameBuf[PILOTDATA_SYMBOLS + r];
+            ctFrameBuf[r] = ctFrameBuf[PSK_FRAME + r];
         }
 
-        for (int r = 2; r < NCT_SYMB_BUF; r++) {
-            psk->m_ctFrameBuf[r] = psk->m_ctSymbBuf[psk->m_sampleCenter + r];
+        for (int r = 2; r < PSK_SYMBOL_BUF; r++) {
+            ctFrameBuf[r] = ctSymbBuf[sampleCenter + r];
         }
     }
 
     *sync_good = 0;
 
-    if ((nextSync == 1) || (lsync == 1)) {
+    if (nextSync || lsync) {
         constellationToBits(bitPairs);
         *sync_good = 1;
     }
@@ -212,47 +248,48 @@ static void demodulate(int bitPairs[], int *sync_good, complex float signal[], i
      */
     int lnin = PSK_M;
 
-    if (nextSync == 1) {
-        if (psk->m_rxTiming > PSK_M / P) {
+    if (nextSync) {
+        if (rxTiming > PSK_M / P) {
             lnin = PSK_M + PSK_M / P;
-        } else if (psk->m_rxTiming < -PSK_M / P) {
+        } else if (rxTiming < -PSK_M / P) {
             lnin = PSK_M - PSK_M / P;
         }
     }
 
     psk->m_nin = lnin;
 
-    *nin_frame = (PILOTDATA_SYMBOLS - 1) * PSK_M + lnin;
+    *nin_frame = (PSK_FRAME - 1) * PSK_CYCLES + lnin;
 }
 
 /*
- * There are two more pilot symbols than data
+ * This function works on a per pilot range,
+ * so only one row of data symbols is processed.
  */
 static void constellationToBits(int bitPairs[]) {
-    complex float y[MOD_SYMBOLS];
-    complex float rxSymbolLinear[MOD_SYMBOLS];
+    complex float y[PSK_SYMBOLS];
+    complex float rxSymbolLinear[PSK_SYMBOLS];
     complex float slope;
     complex float intercept;
-    float x[MOD_SYMBOLS];
+    float x[PSK_SYMBOLS];
 
-    for (int i = 0; i < MOD_SYMBOLS; i++) {
-        x[i] = samplingPoints[i]; // 0, 1, 31, 32
-        y[i] = psk->m_ctFrameBuf[samplingPoints[i]] * psk->m_pilots[i];
+    for (int i = 0; i < PSK_SYMBOLS; i++) {
+        x[i] = samplingPoints[i]; // 0, 1, 29, 30
+        y[i] = ctFrameBuf[samplingPoints[i]] * pilots[i];
     }
 
     linearRegression(&slope, &intercept, x, y);
 
-    for (int i = 0; i < MOD_SYMBOLS; i++) { /* 4 */
-        psk->m_pskPhase[i] = cargf((slope * (MOD_SYMBOLS + i)) + intercept);
+    for (int i = 0; i < PSK_SYMBOLS; i++) { /* 4 */
+        pskPhase[i] = cargf((slope * (PSK_SYMBOLS + i)) + intercept);
     }
 
-    /* Adjust the phase of symbols */
+    /* Adjust the phase of data symbols */
 
-    for (int i = 0; i < MOD_SYMBOLS; i++) {
-        complex float phi_rect = conjf(cmplx(psk->m_pskPhase[i]));
+    for (int i = 0; i < PSK_SYMBOLS; i++) {
+        complex float phi_rect = conjf(cmplx(pskPhase[i]));
 
-        psk->m_rxSymb[i] = psk->m_ctFrameBuf[MOD_SYMBOLS + i] * phi_rect;
-        rxSymbolLinear[MOD_SYMBOLS + i] = psk->m_rxSymb[i];
+        rxSymb[i] = ctFrameBuf[PSK_SYMBOLS + i] * phi_rect;
+        rxSymbolLinear[PSK_SYMBOLS + i] = rxSymb[i];
     }
 
     /*
@@ -260,8 +297,8 @@ static void constellationToBits(int bitPairs[]) {
      * these are the bit-pairs in the modem frame
      */
 
-    for (int i = 0; i < MOD_SYMBOLS; i++) {
-        complex float rotate = psk->m_rxSymb[i] * cmplx(ROT45);
+    for (int i = 0; i < PSK_SYMBOLS; i++) {
+        complex float rotate = rxSymb[i] * cmplx(ROT45);
 
         bitPairs[2 * i + 1] = crealf(rotate) < 0.0f;
         bitPairs[2 * i] = cimagf(rotate) < 0.0f;
@@ -269,17 +306,17 @@ static void constellationToBits(int bitPairs[]) {
 
     float mag = 0.0f;
 
-    for (int i = 0; i < MOD_SYMBOLS; i++) {
+    for (int i = 0; i < PSK_SYMBOLS; i++) {
         mag += cabsf(rxSymbolLinear[i]);
     }
 
-    psk->m_signalRMS = mag / MOD_SYMBOLS;
+    psk->m_signalRMS = mag / PSK_SYMBOLS;
 
     float sum_x = 0.0f;
     float sum_xx = 0.0f;
     int n = 0;
 
-    for (int i = 0; i < MOD_SYMBOLS; i++) {
+    for (int i = 0; i < PSK_SYMBOLS; i++) {
         complex float s = rxSymbolLinear[i];
 
         if (fabsf(crealf(s)) > psk->m_signalRMS) {
@@ -296,16 +333,15 @@ static void constellationToBits(int bitPairs[]) {
     }
 }
 
-static void downconvert(complex float baseband[], complex float offsetSignal[],
-        int lnin) {
+static void downconvert(complex float baseband[], complex float offsetSignal[], int lnin) {
     for (int i = 0; i < lnin; i++) {
-        psk->m_phaseRx *= psk->m_carrier;
-        baseband[i] = offsetSignal[i] * conjf(psk->m_phaseRx);
+        phaseRx *= fcenter;
+        baseband[i] = offsetSignal[i] * conjf(phaseRx);
     }
 
-    /* Normalize */
+    // Normalize
 
-    psk->m_phaseRx /= cabsf(psk->m_phaseRx);
+    phaseRx /= cabsf(phaseRx);
 }
 
 static void receiveFilter(complex float filtered[], complex float baseband[],
@@ -317,17 +353,17 @@ static void receiveFilter(complex float filtered[], complex float baseband[],
          * Move the new samples in from the right.
          */
         for (int k = PSK_NFILTER - n, l = i; k < PSK_NFILTER; k++, l++) {
-            psk->m_rxFilterMemory[k] = baseband[l];
+            rxFilterMemory[k] = baseband[l];
         }
 
         filtered[j] = 0.0f;
 
         for (int k = 0; k < PSK_NFILTER; k++) {
-            filtered[j] += (psk->m_rxFilterMemory[k] * gtAlpha5Root[k]);
+            filtered[j] += (rxFilterMemory[k] * alpha50_root[k]);
         }
 
         for (int k = 0, l = n; k < (PSK_NFILTER - n); k++, l++) {
-            psk->m_rxFilterMemory[k] = psk->m_rxFilterMemory[l];
+            rxFilterMemory[k] = rxFilterMemory[l];
         }
     }
 }
@@ -335,15 +371,15 @@ static void receiveFilter(complex float filtered[], complex float baseband[],
 /*
  * Shift the center frequency
  */
-static void frequencyShift(complex float waveform[], complex float signal[], int lnin) {
+static void frequencyShift(complex float waveform[], complex float signal[], int index, int lnin) {
     complex float rxPhase = cmplx(TAU * -psk->m_freqEstimate / PSK_FS);
 
     for (int i = 0; i < lnin; i++) {
-        psk->m_phaseRx *= rxPhase;
-        waveform[i] = signal[i] * psk->m_phaseRx;
+        phaseRx *= rxPhase;
+        waveform[i] = signal[index + i] * phaseRx;
     }
 
-    psk->m_phaseRx /= cabsf(psk->m_phaseRx);
+    phaseRx /= cabsf(phaseRx);
 }
 
 /*
@@ -372,19 +408,19 @@ static void receiveProcessor(complex float symbols[], complex float signal[],
 
         symbols[i] = rxOneFrame[0];
 
-        if (freqTrack == 1) {
+        if (freqTrack) {
             modStrip = 0.0f;
 
-            adiff = rxOneFrame[0] * conjf(psk->m_prevRxSymbols);
-            psk->m_prevRxSymbols = rxOneFrame[0];
+            adiff = rxOneFrame[0] * conjf(prevRxSymbols);
+            prevRxSymbols = rxOneFrame[0];
 
             adiff = cpowf(adiff, 4.0f);
             modStrip += cabsf(adiff);
 
-            psk->m_freqOffsetFiltered = (1.0f - 0.005f) * psk->m_freqOffsetFiltered +
+            freqOffsetFiltered = (1.0f - 0.005f) * freqOffsetFiltered +
                     0.005f * cargf(modStrip);
 
-            psk->m_freqEstimate += (0.2f * psk->m_freqOffsetFiltered);
+            psk->m_freqEstimate += (0.2f * freqOffsetFiltered);
         }
 
         if (lnin != PSK_M) {
@@ -392,18 +428,18 @@ static void receiveProcessor(complex float symbols[], complex float signal[],
         }
     }
 
-    psk->m_rxTiming = adjustedRxTiming;
+    rxTiming = adjustedRxTiming;
 }
 
 static void pilotCorrelation(float *corr_out, float *mag_out, int t, float f_fine) {
     complex float acorr = 0.0f;
     float mag = 0.0f;
 
-    for (int i = 0; i < MOD_SYMBOLS; i++) {
+    for (int i = 0; i < PSK_SYMBOLS; i++) {
         complex float freqFinePhase = cmplx(TAU * f_fine * (samplingPoints[i] + 1.0f) / PSK_RS);
-        complex float freqCorr = psk->m_ctSymbBuf[t + samplingPoints[i]] * freqFinePhase;
+        complex float freqCorr = ctSymbBuf[t + samplingPoints[i]] * freqFinePhase;
 
-        acorr += (freqCorr * psk->m_pilots[i]);
+        acorr += (freqCorr * pilots[i]);
         mag += cabsf(freqCorr);
     }
 
@@ -416,7 +452,7 @@ static void frameSyncFineFreqEstimate(complex float ch_symb[], int offset,
 
     updateCtSymbolBuffer(ch_symb, offset);
 
-    if (sync == 0) {
+    if (!sync) {
         float corr;
         float mag;
         float max_corr = 0.0f;
@@ -425,55 +461,55 @@ static void frameSyncFineFreqEstimate(complex float ch_symb[], int offset,
         for (int j = -2000; j <= 2000; j += 25) {
             float f_fine = (float) j / 100.0f;
 
-            for (int i = 0; i < PILOTDATA_SYMBOLS; i++) {
+            for (int i = 0; i < PSK_FRAME; i++) {
                 pilotCorrelation(&corr, &mag, i, f_fine);
 
                 if (corr >= max_corr) {
                     max_corr = corr;
                     max_mag = mag;
-                    psk->m_sampleCenter = i;
+                    sampleCenter = i;
                     psk->m_freqFineEstimate = f_fine;
                 }
             }
         }
 
         if (max_corr / max_mag > 0.9f) {
-            psk->m_syncTimer = 0;
+            syncTimer = 0;
             *nextSync = 1;
         } else {
             *nextSync = 0;
         }
 
-        psk->m_ratio = max_corr / max_mag;
+        ratio = max_corr / max_mag;
     }
 }
 
 static void updateCtSymbolBuffer(complex float symbol[], int offset) {
-    for (int i = 0; i < (NCT_SYMB_BUF - PILOTDATA_SYMBOLS); i++) {
-        psk->m_ctSymbBuf[i] = psk->m_ctSymbBuf[PILOTDATA_SYMBOLS + i];
+    for (int i = 0; i < (PSK_SYMBOL_BUF - PSK_FRAME); i++) {
+        ctSymbBuf[i] = ctSymbBuf[PSK_FRAME + i];
     }
 
-    for (int i = NCT_SYMB_BUF - PILOTDATA_SYMBOLS, j = 0; i < NCT_SYMB_BUF; i++, j++) {
-        psk->m_ctSymbBuf[i] = symbol[offset + j];
+    for (int i = PSK_SYMBOL_BUF - PSK_FRAME, j = 0; i < PSK_SYMBOL_BUF; i++, j++) {
+        ctSymbBuf[i] = symbol[offset + j];
     }
 }
 
 static void syncStateMachine(int sync, int *nextSync) {
-    if (sync == 1) {
+    if (sync) {
         float corr;
         float mag;
 
-        pilotCorrelation(&corr, &mag, psk->m_sampleCenter, psk->m_freqFineEstimate);
+        pilotCorrelation(&corr, &mag, sampleCenter, psk->m_freqFineEstimate);
 
-        psk->m_ratio = fabsf(corr) / mag;
+        ratio = fabsf(corr) / mag;
 
-        if (psk->m_ratio < 0.8f) {
-            psk->m_syncTimer++;
+        if (ratio < 0.8f) {
+            syncTimer++;
         } else {
-            psk->m_syncTimer = 0;
+            syncTimer = 0;
         }
 
-        if (psk->m_syncTimer == 10) {
+        if (syncTimer == 10) {
             *nextSync = 0;
         }
     }
@@ -491,15 +527,15 @@ static float rxEstimatedTiming(complex float symbol[], complex float rxFiltered[
     /* Make room for new data, slide left 16 samples */
 
     for (int i = 0, j = P - adjust; i < (NT - 1) * P + adjust; i++, j++) {
-        psk->m_rxFilterMemTiming[i] = psk->m_rxFilterMemTiming[j];
+        rxFilterMemTiming[i] = rxFilterMemTiming[j];
     }
 
     for (int i = (NT - 1) * P + adjust, j = 0; i < (NT * P); i++, j++) {
-        psk->m_rxFilterMemTiming[i] = rxFiltered[j];
+        rxFilterMemTiming[i] = rxFiltered[j];
     }
 
     for (int i = 0; i < (NT * P); i++) {
-        env[i] = cabsf(psk->m_rxFilterMemTiming[i]);
+        env[i] = cabsf(rxFilterMemTiming[i]);
     }
 
     complex float x = 0.0f;
@@ -526,42 +562,13 @@ static float rxEstimatedTiming(complex float symbol[], complex float rxFiltered[
     float fract = rx_timing - low_sample;
     int high_sample = ceilf(rx_timing);
 
-    complex float t1 = psk->m_rxFilterMemTiming[low_sample - 1] * (1.0f - fract);
-    complex float t2 = psk->m_rxFilterMemTiming[high_sample - 1] * fract;
+    complex float t1 = rxFilterMemTiming[low_sample - 1] * (1.0f - fract);
+    complex float t2 = rxFilterMemTiming[high_sample - 1] * fract;
     symbol[0] = t1 + t2;
 
     return adjustedRxTiming * PSK_M;
 }
 
-/*
- * For testing this algorithm you can use these values:
- *
- * x = [1 2 7 8] start slope at 1,2 end at 7,8
- *               solve for [3 4 5 6]
- *
- * y = [
- *      1.0f * (-0.70702 + 0.70708 * I)
- *     -1.0f * ( 0.77314 - 0.63442 * I)
- *      1.0f * (-0.98083 + 0.19511 * I)
- *     -1.0f * ( 0.99508 - 0.09799 * I)
- *     ]
- *
- * Where [1 -1  1 -1] simulates pilot symbol phases
- *
- * yfit = (slope * x) + intercept
- * where x = 1..8
- *
- * Answers printed should be:
- *
- * -0.71953 + 0.71420i
- * -0.76081 + 0.62690i
- * -0.80209 + 0.53960i
- * -0.84338 + 0.45230i
- * -0.88466 + 0.36500i
- * -0.92594 + 0.27770i
- * -0.96722 + 0.19040i
- * -1.00850 + 0.10310i
- */
 static void linearRegression(complex float *slope, complex float *intercept,
         float x[], complex float y[]) {
     complex float sumxy = 0.0f;
@@ -569,14 +576,14 @@ static void linearRegression(complex float *slope, complex float *intercept,
     float sumx = 0.0f;
     float sumx2 = 0.0f;
 
-    for (int i = 0; i < MOD_SYMBOLS; i++) {
+    for (int i = 0; i < PSK_SYMBOLS; i++) {
         sumx += x[i]; // x is a fixed set of values
         sumx2 += (x[i] * x[i]);
         sumxy += (y[i] * x[i]);
         sumy += y[i];
     }
 
-    float den = (MOD_SYMBOLS * sumx2 - sumx * sumx);
+    float den = (PSK_SYMBOLS * sumx2 - sumx * sumx);
 
     /*
      * fits y = mx + b to the (x,y) data
@@ -584,9 +591,9 @@ static void linearRegression(complex float *slope, complex float *intercept,
      */
 
     if (den != 0.0f) {
-        *slope = ((sumxy * MOD_SYMBOLS) - (sumy * sumx)) / den;
+        *slope = ((sumxy * PSK_SYMBOLS) - (sumy * sumx)) / den;
         *intercept = ((sumy * sumx2) - (sumxy * sumx)) / den;
-    } else { // no solution never happen with the data used in this modem
+    } else {
         *slope = 0.0f;
         *intercept = 0.0f;
     }
