@@ -1,4 +1,5 @@
 /*---------------------------------------------------------------------------*\
+
   FILE........: psk_internal.h
   AUTHORS.....: David Rowe & Steve Sampson
   DATE CREATED: November 2020
@@ -31,7 +32,6 @@ extern "C" {
 #include <stdlib.h>
 #include <math.h>
 #include <stdint.h>
-#include <stdbool.h>
 #include <string.h>
 #include <complex.h>
 
@@ -58,50 +58,46 @@ extern "C" {
 
 #define ROT45                        (M_PI / 4.0f)
 
-#define PSK_NOM_TX_SAMPLES_PER_FRAME 600
-#define PSK_NOM_RX_SAMPLES_PER_FRAME 640
-#define PSK_BITS_PER_FRAME           56
+// ((7 rows * 31 symb ) + 31 pilot sym)
+
+#define PSK_SYMBOLS_PER_FRAME        248
+
+// ((7 rows * 31 symb ) + 31 pilot sym) * 2 bits
+
+#define PSK_BITS_PER_FRAME           496
 
 #define PSK_CLIP                     6.5f
 #define PSK_M                        100
-#define PSK_NSYM                     6
-#define PSK_NFILTER                  (PSK_NSYM * PSK_M)
-#define PSK_RS                       1600
+#define PSK_RS                       1600.0f
 #define PSK_FS                       8000.0f
 #define PSK_CENTER                   1100.0f
+#define PSK_CYCLES                   (int) (PSK_FS / PSK_RS)
 #define NT                           5
 #define P                            4
-#define DATA_SYMBOLS                 31
-#define PILOT_SYMBOLS                33
-#define NSYMPILOTDATA                (PILOT_SYMBOLS + DATA_SYMBOLS) 
-#define NCT_SYMB_BUF                 (NSYMPILOTDATA + 2)
-#define NSW                          4
+#define MOD_SYMBOLS                  31
+#define PILOTDATA_SYMBOLS            (MOD_SYMBOLS * 2) 
+#define NCT_SYMB_BUF                 (PILOTDATA_SYMBOLS + 2)
+#define NSW                          7
 #define GAIN                         (sqrtf(2.0f) / 2.0f)
 
-#define TAPS                         49
+#define NTAPS                        49
 
 /* Data Elements combined into a memory structure */
     
 struct PSK {
-    complex float m_txFilterMemory[PSK_NSYM];
-    complex float m_rxFilterMemory[PSK_NFILTER];
     complex float m_rxFilterMemTiming[NT * P];
     complex float m_carrier;
     complex float m_phaseTx;
     complex float m_phaseRx;
-    complex float m_fbbPhaseTx;
-    complex float m_fbbPhaseRx;
-    complex float m_rxsamples[TAPS];
-    complex float m_txsamples[TAPS];
-    complex float m_crxsamples[PSK_NOM_RX_SAMPLES_PER_FRAME];
-    complex float m_ctxsamples[PSK_NOM_TX_SAMPLES_PER_FRAME];
-    complex float m_rxSymb[DATA_SYMBOLS];
+    complex float m_rxSymb[MOD_SYMBOLS];
     complex float m_ctSymbBuf[NCT_SYMB_BUF];
-    complex float m_ctFrameBuf[NSYMPILOTDATA + 2];
-    complex float m_chFrameBuf[NSW * NSYMPILOTDATA * PSK_M];
+    complex float m_ctFrameBuf[NCT_SYMB_BUF];
+    complex float m_chFrameBuf[NSW * PILOTDATA_SYMBOLS * PSK_M];
     complex float m_prevRxSymbols;
-    float m_pilot2[PILOT_SYMBOLS * 2];
-    float m_pskPhase[DATA_SYMBOLS];
+    complex float m_pilots[MOD_SYMBOLS];
+    complex float m_tx_filter[NTAPS];
+    complex float m_rx_filter[NTAPS];
+    float m_pskPhase[MOD_SYMBOLS];
     float m_freqEstimate;
     float m_ratio;
     float m_signalRMS;
@@ -110,13 +106,13 @@ struct PSK {
     float m_freqOffsetFiltered;
     float m_rxTiming;
     float m_freqFineEstimate;
-    bool m_sync;
+    int m_sync;
     int m_sampleCenter;
     int m_nin;
     int m_syncTimer;
+    int m_clip;
 };
 
 #ifdef	__cplusplus
 }
 #endif
-

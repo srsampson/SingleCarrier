@@ -1,4 +1,5 @@
 /*---------------------------------------------------------------------------*\
+
   FILE........: psktx.c
   AUTHORS.....: David Rowe & Steve Sampson
   DATE CREATED: November 2020
@@ -23,62 +24,63 @@
  */
 
 #include "psk_internal.h"
+#include "fir.h"
 
 // Externals
 
 extern struct PSK *psk;
-extern const float pilots[PILOT_SYMBOLS];
+extern const float pilots[MOD_SYMBOLS];
 extern const complex float constellation[];
-extern const float gtAlpha5Root[];
+extern const float alpha50_root[];
 
 // Prototypes
 
-static void upconvert(complex float [], int, complex float);
+static void upconvert(complex float [], complex float);
 static void bitsToConstellation(complex float [], int []);
 
 // Functions
 
 /*
- * Function to return a modulated signal of the bits provided.
+ * Function to return a modulated frame from the bits provided.
  *
- * @param symbols a complex array of the modulated signal
- * @param bits a boolean array of the 56 data bits
+ * @param symbols complex array of the modulated frame (31 + (7 * 31) 248 symbols
+ * @param bits int array of the data bits (496 bits)
  * @return int the number of symbols to be processed
  */
-int modulate(complex float symbols[], int bits[]) {
-    complex float tx_symb[NSYMPILOTDATA];
+int psk_modulate(complex float symbols[], int bits[]) {
+    complex float tx_symb[PILOTDATA_SYMBOLS];
 
     /*
      * tx_symb will have the constellation symbols
-     * as determined by the bit pairs
+     * as determined by the bit pairs at 1600 baud
      */
     bitsToConstellation(tx_symb, bits);
 
-    /* create the PSK modem frame */
+    /* create the PSK modem frame (8 kHz rate) */
 
-    for (int i = 0; i < NSYMPILOTDATA; i++) {
-        upconvert(symbols, (i * PSK_M), tx_symb[i]);
-    }
+    upconvert(symbols, tx_symb);
 
-    /*
-     * Reduce Crest Factor by about 2 dB
-     * this will typically occur about 5% of the signal samples
-     */
-    for (int i = 0; i < PSK_NOM_TX_SAMPLES_PER_FRAME; i++) {
-        float mag = cabsf(symbols[i]);
+    if (psk->m_clip == 1) {
+        /*
+         * Reduce Crest Factor by about 2 dB
+         * this will typically occur about 5% of the signal samples
+         */
+        for (int i = 0; i < PSK_SYMBOLS_PER_FRAME; i++) {
+            float mag = cabsf(symbols[i]);
 
-        if (mag > PSK_CLIP) {                /* 6.5 */
-            symbols[i] *= (PSK_CLIP / mag);
+            if (mag > PSK_CLIP) { /* 6.5 */
+                symbols[i] *= (PSK_CLIP / mag);
+            }
         }
     }
-    
+
     /* Amplify the signal to user-level in the complex array */
         
-    for (int i = 0; i < PSK_NOM_TX_SAMPLES_PER_FRAME; i++) {
+    for (int i = 0; i < PSK_SYMBOLS_PER_FRAME; i++) {
         symbols[i] *= (MODEM_SCALE * NORM_PWR);
     }
 
-    return PSK_NOM_TX_SAMPLES_PER_FRAME;
+    return PSK_SYMBOLS_PER_FRAME;
 }
 
 /*
@@ -95,13 +97,14 @@ static void bitsToConstellation(complex float symbols[], int bits[]) {
 
     /* First do the pilot symbols... */
 
-    for (int i = 0; i < PILOT_SYMBOLS; i++) {
-        symbols[i] = (complex float) pilots[i];
+    for (int i = 0; i < MOD_SYMBOLS; i++) {
+        symbols[i] = psk->m_pilots[i];
     }
 
-    /* ...then do the data symbols */
+    /* ...then add the data symbols */
 
-    for (int i = 0, j = PILOT_SYMBOLS; i < DATA_SYMBOLS; i++, j++) {
+    for (int i = 0, j = MOD_SYMBOLS; i < MOD_SYMBOLS; i++, j++) {
+        // Sends IQ, IQ ... IQ or I = Odd Bits Q = Even Bits
         int bitPair = ((bits[(i * 2)] & 0x01) << 1) | (bits[(i * 2) + 1] & 0x01);
 
         symbols[j] = constellation[bitPair];
@@ -109,70 +112,39 @@ static void bitsToConstellation(complex float symbols[], int bits[]) {
 }
 
 /*
- * Mix the new baseband signal segment into the output waveform.
- * 
- * Using an offset variable is a little cleaner than just offsetting
- * the waveform pointer, which is not very self-documenting.
+ * Mix the baseband signal into the output waveform.
  * 
  * @param waveform the complex output signal centered on freq
- * @param offset the index to put the mixed signal in the waveform array
  * @param baseband the input baseband signal to be mixed
  */
-static void upconvert(complex float waveform[], int offset, complex float baseband) {
-    /* Clean out the buffer */
-
-    for (int i = 0; i < PSK_M; i++) {
-        waveform[offset + i] = 0.0f;    // complex
-    }
+static void upconvert(complex float waveform[], complex float baseband) {
+    complex float signal[(PILOTDATA_SYMBOLS * PSK_CYCLES)];
 
     /*
-     * Add the (baseband symbols * .707 amplitude) to the last row,
-     * which is available now, since the earlier call has
-     * moved each row up one row.
+     * Build the 1600 baud packet Frame zero padding
+     * for the desired 8 kHz sample rate.
      */
-    psk->m_txFilterMemory[PSK_NSYM - 1] = baseband * GAIN; /* bottom row */
+    for (int i = 0; i < PILOTDATA_SYMBOLS; i++) {
+        signal[(i * PSK_CYCLES)] = baseband[i];
 
-    /*
-     * Run the filter over the baseband constellation for each row
-     */
-    for (int i = 0; i < PSK_M; i++) {
-        complex float acc = 0.0f;
-// TODO
-        for (int j = 0, k = 0; j < PSK_NSYM; j++, k++) {
-            acc += PSK_M * psk->m_txFilterMemory[j] * gtAlpha5Root[k];
+        for (int j = 1; j < PSK_CYCLES; j++) {
+            signal[(i * PSK_CYCLES) + j] = 0.0f;
         }
-
-        /* Adjust the baseband phase and add symbol */
-
-        psk->m_phaseTx *= psk->m_carrier;
-        waveform[offset + i] += (acc * psk->m_phaseTx);
     }
-
-    /* Adjust the final phase, and move the baseband segment up to freq */
-
-    complex float temp = cmplx(TAU * PSK_CENTER / PSK_FS);
-
-    for (int i = 0; i < PSK_M; i++) {
-        psk->m_fbbPhaseTx *= temp;
-        waveform[offset + i] *= (psk->m_fbbPhaseTx * 2.0f);
-    }
-
-    /* Normalize carriers of the baseband phase */
-
-    psk->m_phaseTx /= cabsf(psk->m_phaseTx);
-
-    /* same for up-conversion phase */
-
-    psk->m_fbbPhaseTx /= cabsf(psk->m_fbbPhaseTx);
 
     /*
-     * Move the rows 1..5 up one older position (in time). You don't
-     * have to worry about zero'ing out the last row, as the new rows
-     * carrier symbols will go there on the next call to this function.
+     * Raised Root Cosine Filter
      */
-    for (int i = 0; i < (PSK_NSYM - 1); i++) {
-        psk->m_txFilterMemory[i] = psk->m_txFilterMemory[i + 1];
-    }
-}
+    fir(psk->m_tx_filter, signal, (PILOTDATA_SYMBOLS * PSK_CYCLES));
 
-/* EOF */
+    /*
+     * Shift Baseband up to Center Frequency
+     */
+    for (int i = 0; i < (PILOTDATA_SYMBOLS * PSK_CYCLES); i++) {
+        psk->m_phaseTx *= psk->m_carrier;
+        waveform[i] = signal[i] * psk->m_phaseTx;
+    }
+    
+    /* Normalize phase */
+    psk->m_phaseTx /= cabsf(psk->m_phaseTx);
+}

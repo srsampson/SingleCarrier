@@ -1,4 +1,5 @@
 /*---------------------------------------------------------------------------*\
+
   FILE........: psk.c
   AUTHORS.....: David Rowe & Steve Sampson
   DATE CREATED: November 2020
@@ -25,7 +26,6 @@
 #include <stdio.h>
 #include <assert.h>
 #include <stdint.h>
-#include <stdbool.h>
 #include <string.h>
 #include <math.h>
 
@@ -53,88 +53,32 @@ const complex float constellation[] = {
     -1.0f + 0.0f * I
 };
 
-const int8_t pilots[PILOT_SYMBOLS] = {
-    -1, -1, 1, 1, -1, -1, -1, 1,
-    -1, 1, -1, 1, 1, 1, 1, 1,
-    1, 1, 1, -1, -1, 1, -1, 1,
-    -1, 1, 1, 1, 1, 1, 1, 1, 1
+/*
+ * Same number of pilots as data symbols
+ */
+const int8_t pilots[] = {
+    -1,  1,  1, -1, -1, -1,  1, -1,
+     1, -1,  1,  1,  1,  1,  1,  1,
+     1,  1, -1, -1,  1, -1,  1, -1,
+     1,  1,  1,  1,  1,  1, -1
 };
 
 /*
  * Linear Regression X point values.
- * 0,1 for start, and 31,32 for end.
+ * 0,1 for start, and 29,30 for end.
  * Algorithm will fit the rest.
  */
 const int samplingPoints[] = {
-    0, 1, 31, 32
-};
-
-/*
- * Cosine on a pedestal FIR filter
- * coefficients designed for .5 alpha
- *
- * Created with Octave:
- * hs = gen_rn_coeffs(.5, 1.0/8000.0, 1600, 10, 5);
- */
-const float gtAlpha5Root[] = {
-    0.002040776f,
-    0.001733205f,
-    -0.000094696f,
-    -0.002190566f,
-    -0.002803057f,
-    -0.001145122f,
-    0.001875377f,
-    0.004037490f,
-    0.003421695f,
-    0.000028693f,
-    -0.003768086f,
-    -0.004657093f,
-    -0.000932888f,
-    0.005513738f,
-    0.009520251f,
-    0.005665029f,
-    -0.007427566f,
-    -0.024194919f,
-    -0.032975574f,
-    -0.021014393f,
-    0.018508466f,
-    0.081140162f,
-    0.150832112f,
-    0.205501104f,
-    0.226202985f,
-    0.205501104f,
-    0.150832112f,
-    0.081140162f,
-    0.018508466f,
-    -0.021014393f,
-    -0.032975574f,
-    -0.024194919f,
-    -0.007427566f,
-    0.005665029f,
-    0.009520251f,
-    0.005513738f,
-    -0.000932888f,
-    -0.004657093f,
-    -0.003768086f,
-    0.000028693f,
-    0.003421695f,
-    0.004037490f,
-    0.001875377f,
-    -0.001145122f,
-    -0.002803057f,
-    -0.002190566f,
-    -0.000094696f,
-    0.001733205f,
-    0.002040776f
+    0, 1, 29, 30
 };
 
 struct PSK *psk;
 
 // Functions
 
-int pskCreate() {
+int psk_create() {
 
-    psk = (struct PSK *) malloc(sizeof(struct PSK));
+    psk = (struct PSK *) calloc(1, sizeof(struct PSK));
     
     if (psk == NULL)
         return 1;
@@ -146,22 +90,21 @@ int pskCreate() {
     psk->m_phaseTx = cmplx(0.0f);
     psk->m_phaseRx = cmplx(0.0f);
 
-    psk->m_fbbPhaseTx = cmplx(0.0f);
-    psk->m_fbbPhaseRx = cmplx(0.0f);
-
     /*
      * Initialize the pilot phases
+     * Same number of pilots as data
      */
-    for (int i = 0; i < PILOT_SYMBOLS; i++) {
-        psk->m_pilot2[i] = (float) pilots[i];
+    for (int i = 0; i < MOD_SYMBOLS; i++) {
+        psk->m_pilots[i] = (float) pilots[i] + 0.0 * I; // I + j0
     }
 
     psk->m_nin = PSK_M;
+    psk->m_clip = 1;    // clip TX waveform
 
     return 0;
 }
 
-void pskDestroy() {
+void psk_destroy() {
     free(psk);
 }
 
@@ -171,18 +114,18 @@ void pskDestroy() {
  * It's the users responsibility to check for sync, but
  * they may want to know the value even if not in sync.
  */
-float getCenterFrequency() {
+float psk_get_frequency_estimate() {
     return psk->m_freqEstimate;
 }
 
 /*
  * Provide an API for reading the modem sync frequency
- * of the pilot calculated fine center.
+ * of the pilot calculated fine frequency center.
  * 
  * It's the users responsibility to check for sync, but
  * they may want to know the value even if not in sync.
  */
-float getFrequencyFineEstimate() {
+float psk_get_fine_frequency_estimate() {
     return psk->m_freqFineEstimate;
 }
 
@@ -191,7 +134,7 @@ float getFrequencyFineEstimate() {
  * the values are filtered for the next call,
  * just to smooth the values over time.
  */
-float getSNR() {
+float psk_get_SNR() {
     float new_snr_est = 20.0f * log10f((psk->m_signalRMS + 1E-6f)
             / (psk->m_noiseRMS + 1E-6f)) - 10.0f * log10f(3000.0f / 2400.0f);
 
@@ -202,13 +145,20 @@ float getSNR() {
 
 /*
  * Return the sync state to the caller
+ * 0 = false, 1 = true
  */
-bool getSync() {
+int psk_get_SYNC() {
     return psk->m_sync;
 }
 
-int getNIN() {
+int psk_get_NIN() {
     return psk->m_nin;
 }
 
-/* EOF */
+int psk_get_clip() {
+    return psk->m_clip;
+}
+
+void psk_set_clip(int val) {
+    psk->m_clip = (val != 0);
+}

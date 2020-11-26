@@ -1,4 +1,5 @@
 /*---------------------------------------------------------------------------*\
+  
   FILE........: psk.h
   AUTHORS.....: David Rowe & Steve Sampson
   DATE CREATED: November 2020
@@ -31,7 +32,6 @@ extern "C" {
 /* Includes */
 
 #include <complex.h>
-#include <stdbool.h>
 #include <stdint.h>
 
 struct PSK;
@@ -42,32 +42,34 @@ struct PSK;
  * returns 0 if no errors
  */
 
-int pskCreate(void);     /* create the modem instance */
-void pskDestroy(void);   /* close down modem gracefully */
+int psk_create(void);     /* create the modem instance */
+void psk_destroy(void);   /* close down modem gracefully */
 
 /*
- * Function to return a modulated signal of the 56 bits provided.
+ * Function to return a modulated signal of the provided bits.
  *
- * @param 1 a complex array of the modulated signal
- * @param 2 a int array of the data bits
+ * @param 1 complex array of the modulated frame
+ * @param 2 int array of the data bits
  * @return int the number of symbols processed
  */
-int modulate(complex float [], int []);
+int psk_modulate(complex float [], int []);
 
 /*
  * Function to receive demodulated signals
  * 
- * @param 1 a boolean array of the demodulated bits
+ * @param 1 a unsigned byte array of the demodulated bits
  * @param 2 a complex array of the modulated signal
- * @return sync a boolean set to show sync state
+ * @return sync a int set to show sync state
  */
-int receive(uint8_t [], complex float []);
+int psk_receive(uint8_t [], complex float []);
 
-float getSNR(void);
-int getSync(void);
-int getNIN(void);
-float getCenterFrequency();
-float getFrequencyFineEstimate();
+float psk_get_SNR(void);
+int psk_get_SYNC(void);
+int psk_get_NIN(void);
+float psk_get_frequency_estimate();
+float psk_get_fine_frequency_estimate();
+int psk_get_clip(void);
+void psk_set_clip(int);
 
 #ifdef	__cplusplus
 }
