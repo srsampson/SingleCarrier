@@ -47,15 +47,14 @@ static complex float tx_filter[NTAPS];
 // Functions
 
 /*
- * Function to return a modulated frame from the bits provided.
+ * Function to return an IQ PCM 16-bit 2-Channel waveform at 8 kHz rate.
  *
- * @param symbols complex array of the modulated frame (1240 symbols)
- * @param bits int array of the data bits (434 bits)
- * @return int the number of symbols to be processed (1240 symbols)
+ * @param waveform complex array of the modulated IQ data and pilots frame
+ * @param bits int array of the data only bits (7 * 31 * 2) = 434 bits
+ * @return int the number of complex IQ samples (2480 16-bit PCM samples)
  */
-int psk_modulate(complex float symbols[], int bits[]) {
-    int length = PSK_FRAME;
-    complex float tx_symb[length];
+int psk_modulate(int16_t waveform[], int bits[]) {
+    complex float tx_symb[PSK_FRAME];
 
     /*
      * tx_symb will have the constellation symbols
@@ -63,13 +62,15 @@ int psk_modulate(complex float symbols[], int bits[]) {
      */
     bitsToConstellation(tx_symb, bits);
 
-    // create the PSK modem frame (8 kHz rate)
-
-    upconvert(symbols, tx_symb);
-
     // length increased now by PSK_CYCLES
 
-    length *= PSK_CYCLES;
+    int length = PSK_FRAME * PSK_CYCLES;
+    
+    complex float spectrum[length];
+    
+    // create the PSK modem frame (8 kHz rate)
+
+    upconvert(spectrum, tx_symb);
     
     if (psk->m_clip) {
         /*
@@ -77,15 +78,26 @@ int psk_modulate(complex float symbols[], int bits[]) {
          * this will typically occur about 5% of the signal samples
          */
         for (int i = 0; i < length; i++) {
-            float mag = cabsf(symbols[i]);
+            float mag = cabsf(spectrum[i]);
 
             if (mag > PSK_CLIP_AMP) { /* 6.5 */
-                symbols[i] *= (PSK_CLIP_AMP / mag);
+                spectrum[i] *= (PSK_CLIP_AMP / mag);
             }
         }
     }
 
-    return length;
+    // (7 rows * 31 QPSK data + 31 BPSK pilots) = 248 symbols at 1600 Hz
+    // Multiply by 5 CYCLES to get 8 kHz rate = 1240 IQ samples
+    // 2-Channel IQ PCM 16-bit is then sent (2480)
+
+    for (int i = 0, j = 0; i < length; i++, j += 2) {
+        waveform[j] = (int16_t) (crealf(spectrum[i]) / SCALE);
+        waveform[j+1] = (int16_t) (cimagf(spectrum[i]) / SCALE);
+    }
+
+    // We now have 1240 * 2 = 2480 for 2-Channel PCM 16-bit
+
+    return length * 2;
 }
 
 /*
@@ -118,7 +130,7 @@ static void bitsToConstellation(complex float symbols[], int bits[]) {
  * @param waveform the complex output signal centered on freq
  * @param baseband the input baseband signal to be mixed
  */
-static void upconvert(complex float waveform[], complex float baseband[]) {
+static void upconvert(complex float spectrum[], complex float baseband[]) {
     int length = (PSK_FRAME * PSK_CYCLES);
     complex float signal[length];
 
@@ -144,7 +156,7 @@ static void upconvert(complex float waveform[], complex float baseband[]) {
      */
     for (int i = 0; i < length; i++) {
         phaseTx *= fcenter;
-        waveform[i] = signal[i] * phaseTx;
+        spectrum[i] = signal[i] * phaseTx;
     }
     
     /* Normalize phase */

@@ -41,7 +41,6 @@ extern float alpha50_root[];
 #define NT           5
 #define NSW          4
 #define P            4
-#define SCALE        8192.0f
 
 // Prototypes
 
@@ -87,9 +86,11 @@ const int samplingPoints[] = {
 // Functions
 
 /*
- * Given a signal of complex samples,
- * return data bits packed into 8 bytes
- * and a sync indication
+ * Function to receive bits from demodulated complex IQ signals
+ * 
+ * @param 1 a unsigned byte array of the decoded bits
+ * @param 2 a complex array of the IQ modulated complex signal
+ * @return sync a int set to show sync state
  */
 int receive(uint8_t packed_codec_bits[], complex float signal[]) {
     int bitPairs[PSK_DATA_BITS_PER_FRAME];

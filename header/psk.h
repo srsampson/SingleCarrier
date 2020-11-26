@@ -47,19 +47,19 @@ int psk_create(void);     /* create the modem instance */
 void psk_destroy(void);   /* close down modem gracefully */
 
 /*
- * Function to return a modulated signal of the provided bits.
+ * Function to return an IQ PCM 16-bit 2-Channel waveform at 8 kHz rate.
  *
- * @param 1 complex array of the modulated frame
- * @param 2 int array of the data bits
- * @return int the number of symbols processed
+ * @param waveform complex array of the modulated IQ data and pilots frame
+ * @param bits int array of the data only bits (7 * 31 * 2) = 434 bits
+ * @return int the number of complex IQ samples (2480 16-bit PCM samples)
  */
-int psk_modulate(complex float [], int []);
+int psk_modulate(int16_t [], int []);
 
 /*
- * Function to receive demodulated signals
+ * Function to receive bits from demodulated complex IQ signals
  * 
- * @param 1 a unsigned byte array of the demodulated bits
- * @param 2 a complex array of the modulated signal
+ * @param 1 a unsigned byte array of the decoded bits
+ * @param 2 a complex array of the IQ modulated complex signal
  * @return sync a int set to show sync state
  */
 int psk_receive(uint8_t [], complex float []);

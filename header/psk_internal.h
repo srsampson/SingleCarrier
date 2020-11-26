@@ -64,6 +64,7 @@ struct PSK {
 #define PSK_CENTER      1100.0f
 #define PSK_CYCLES      (int) (PSK_FS / PSK_RS)
 #define PSK_M           100
+#define SCALE           8192.0f
 
 /*
  * This method is much faster than using cexp()
