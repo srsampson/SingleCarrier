@@ -73,19 +73,19 @@ struct PSK {
 #define cmplx(float_value) (cosf(float_value) + sinf(float_value) * I)
 #define cmplxconj(float_value) (cosf(float_value) + sinf(float_value) * -I)
 
-#define PSK_SYMBOLS                  31
+#define PSK_SYMBOLS                  32
 #define PSK_DATA_ROWS                7
 
-// 7 rows * 31 QPSK symbols (217)
+// 7 rows * 32 QPSK symbols
 #define PSK_DATA_SYMBOLS_PER_FRAME   (PSK_SYMBOLS * PSK_DATA_ROWS)
     
-// 1 row * 31 BPSK symbols
+// 1 row * 32 BPSK symbols
 #define PSK_PILOT_SYMBOLS_PER_FRAME  PSK_SYMBOLS
     
-// (7 rows * 31 QPSK symbols) * 2 bits (434)
+// (7 rows * 32 QPSK symbols) * 2 bits
 #define PSK_DATA_BITS_PER_FRAME      (PSK_SYMBOLS * PSK_DATA_ROWS) * 2
     
-// (1 rows * 31 BPSK symbols) * 1 bit (31)
+// (1 rows * 32 BPSK symbols) * 1 bit
 #define PSK_PILOT_BITS_PER_FRAME     PSK_SYMBOLS
 
 #define PSK_FRAME                    (PSK_PILOT_SYMBOLS_PER_FRAME + PSK_DATA_SYMBOLS_PER_FRAME)
