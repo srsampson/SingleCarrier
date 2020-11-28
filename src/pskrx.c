@@ -75,12 +75,10 @@ static int sampleCenter;
 static int syncTimer;
 
 /*
- * Linear Regression X point values.
- * 0,1 for start, and 29,30 for end.
- * Algorithm will fit the rest.
+ * Linear Regression X point now, future values.
  */
 const int samplingPoints[] = {
-    0, 1, 29, 30
+    0, 31
 };
 
 // Functions
@@ -571,29 +569,32 @@ static float rxEstimatedTiming(complex float symbol[], complex float rxFiltered[
 }
 
 static void linearRegression(complex float *slope, complex float *intercept,
-        float x[], complex float y[]) {
+        float x[], complex float y[], int n) {
     complex float sumxy = 0.0f;
     complex float sumy = 0.0f;
     float sumx = 0.0f;
     float sumx2 = 0.0f;
 
-    for (int i = 0; i < PSK_SYMBOLS; i++) {
-        sumx += x[i]; // x is a fixed set of values
+    for (int i = 0; i < n; i++) {
+        sumx += x[i];
         sumx2 += (x[i] * x[i]);
-        sumxy += (y[i] * x[i]);
+        
+        sumxy += (x[i] * y[i]);
         sumy += y[i];
     }
 
-    float den = (PSK_SYMBOLS * sumx2 - sumx * sumx);
+    float denom = (((float) n * sumx2) - (sumx * sumx));
 
     /*
      * fits y = mx + b to the (x,y) data
-     * x is the sampling points
+     * x is the pilot now, future sampling points
      */
 
-    if (den != 0.0f) {
-        *slope = ((sumxy * PSK_SYMBOLS) - (sumy * sumx)) / den;
-        *intercept = ((sumy * sumx2) - (sumxy * sumx)) / den;
+    if (denom != 0.0f) {
+        float d = (1.0f / denom);
+
+        *slope = ((sumxy * (float) n) - (sumx * sumy)) * d;
+        *intercept = ((sumx2 * sumy) - (sumx * sumxy)) * d;
     } else {
         *slope = 0.0f;
         *intercept = 0.0f;
