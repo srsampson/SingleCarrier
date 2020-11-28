@@ -78,7 +78,7 @@ static int syncTimer;
  * Linear Regression pilot sample point now, and future
  */
 const int samplingPoints[] = {
-    0, PSK_DATA_SYMBOLS_PER_FRAME
+    0, PSK_FRAME
 };
 
 // Functions
