@@ -1,10 +1,10 @@
 /*---------------------------------------------------------------------------*\
 
-  FILE........: psk.c
+  FILE........: pskdv.c
   AUTHORS.....: David Rowe & Steve Sampson
   DATE CREATED: November 2020
 
-  A 1600 baud QPSK voice modem library
+  A 1600 baud QPSK Digital Voice modem library
 
 \*---------------------------------------------------------------------------*/
 /*
@@ -29,72 +29,64 @@
 #include <assert.h>
 #include <stdint.h>
 
-#include "psk_internal.h"
+#include "pskdv_internal.h"
 
 // Globals
 
-struct PSK *psk;
-const char copyright[] = "Copyright (C) 2020 David Rowe\r\nGNU LGPL 2.1 License\r\n";
-complex float fcenter;
-complex float pilots[PSK_PILOT_SYMBOLS_PER_FRAME];
-complex phaseRx;
-complex phaseTx;
+struct PSK *e_psk;
 
-/*
- * QPSK Constellation - Gray Code
- */
-const complex float constellation[] = {
-     1.0f + 0.0f * I,
-     0.0f + 1.0f * I,
-     0.0f - 1.0f * I,
-    -1.0f + 0.0f * I
-};
+complex float e_fcenter;
+complex float e_pilots[PSK_PILOT_SYMBOLS_PER_FRAME];
+complex e_phaseRx;
+complex e_phaseTx;
 
 // Locals
 
 /*
- * Same number of pilots as data symbols
+ * Same number of pilots (32) as data symbols
  */
 static const int8_t pilotvalues[] = {
     -1,  1,  1, -1, -1, -1,  1, -1,
      1, -1,  1,  1,  1,  1,  1,  1,
      1,  1, -1, -1,  1, -1,  1, -1,
-     1,  1,  1,  1,  1,  1, -1
+     1,  1,  1,  1,  1,  1,  1, -1
 };
+
+const char copyright[] = "Copyright (C) 2020 David Rowe\r\nGNU LGPL 2.1 License\r\n";
 
 // Functions
 
 int psk_create() {
     // Initialize to all zero
-    if ((psk = (struct PSK *) calloc(1, sizeof(struct PSK))) == NULL) {
+    if ((e_psk = (struct PSK *) calloc(1, sizeof(struct PSK))) == NULL) {
         // Return failure
         return 0;
     }
 
     // Initialize Transmit and Receive phases
 
-    fcenter = cmplx(TAU * PSK_CENTER / PSK_FS);
+    e_fcenter = cmplx(TAU * PSK_CENTER / PSK_FS);
     
-    phaseTx = cmplx(0.0f);
-    phaseRx = cmplx(0.0f);
+    e_phaseTx = cmplx(0.0f);
+    e_phaseRx = cmplx(0.0f);
 
     /*
      * Initialize the pilot phases
-     * Same number of pilots as data
+     * Same number of pilots (32) as data
      */
     for (int i = 0; i < PSK_SYMBOLS; i++) {
-        pilots[i] = (float) pilotvalues[i] + 0.0 * I; // I + j0
+        e_pilots[i] = (float) pilotvalues[i] + 0.0 * I; // I + j0
     }
-
-    psk->m_nin = PSK_CYCLES;
-    psk->m_clip = 1;    // clip TX waveform
+    
+    e_psk->nin = PSK_CYCLES;
+    e_psk->clip = true;    // clip TX waveform
 
     // Return success
     return 1;
 }
 
 void psk_destroy() {
-    free(psk);
+    free(e_psk);
 }
 
 /*
@@ -104,7 +96,7 @@ void psk_destroy() {
  * they may want to know the value even if not in sync.
  */
 float psk_get_frequency_estimate() {
-    return psk->m_freqEstimate;
+    return e_psk->freqEstimate;
 }
 
 /*
@@ -115,21 +107,14 @@ float psk_get_frequency_estimate() {
  * they may want to know the value even if not in sync.
  */
 float psk_get_fine_frequency_estimate() {
-    return psk->m_freqFineEstimate;
+    return e_psk->freqFineEstimate;
 }
 
 /*
- * After returning the SNR to the caller,
- * the values are filtered for the next call,
- * just to smooth the values over time.
+ * SNR of last receive frame
  */
 float psk_get_SNR() {
-    float new_snr_est = 20.0f * log10f((psk->m_signalRMS + 1E-6f)
-            / (psk->m_noiseRMS + 1E-6f)) - 10.0f * log10f(3000.0f / 2400.0f);
-
-    psk->m_snrEstimate = 0.9f * psk->m_snrEstimate + 0.1f * new_snr_est;
-
-    return psk->m_snrEstimate;
+    return e_psk->snrEstimate;
 }
 
 /*
@@ -137,17 +122,20 @@ float psk_get_SNR() {
  * 0 = false, 1 = true
  */
 int psk_get_SYNC() {
-    return psk->m_sync;
+    return e_psk->sync;
 }
 
 int psk_get_NIN() {
-    return psk->m_nin;
+    return e_psk->nin;
 }
 
-int psk_get_clip() {
-    return psk->m_clip;
+bool psk_get_clip() {
+    return e_psk->clip;
 }
 
-void psk_set_clip(int val) {
-    psk->m_clip = (val != 0);
+/*
+ * User clipping toggle switch
+ */
+void psk_set_clip(bool val) {
+    e_psk->clip = val;
 }
