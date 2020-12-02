@@ -4,7 +4,7 @@
   AUTHORS.....: David Rowe & Steve Sampson
   DATE CREATED: November 2020
 
-  A 1600 baud QPSK voice modem library
+  A 1600 baud QPSK Digital Voice modem library
 
 \*---------------------------------------------------------------------------*/
 /*
@@ -35,7 +35,7 @@
  * Created with Octave:
  * hs = gen_rn_coeffs(.5, 1.0/8000.0, 1600, 10, 5);
  */
-const float alpha50_root[] = {
+const float e_alpha50_root[] = {
     0.002040776f,
     0.001733205f,
     -0.000094696f,
@@ -103,7 +103,7 @@ void fir(complex float memory[], complex float sample[], int length) {
         complex float y = 0.0f;
 
         for (int i = 0; i < NTAPS; i++) {
-            y += (memory[i] * alpha50_root[i]);
+            y += (memory[i] * e_alpha50_root[i]);
         }
 
         sample[j] = y * GAIN;
