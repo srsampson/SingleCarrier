@@ -1,10 +1,10 @@
 /*---------------------------------------------------------------------------*\
 
-  FILE........: psk_internal.h
+  FILE........: pskdv_internal.h
   AUTHORS.....: David Rowe & Steve Sampson
   DATE CREATED: November 2020
 
-  A 1600 baud QPSK voice modem library
+  A 1600 baud QPSK Digital Voice modem library
 
 \*---------------------------------------------------------------------------*/
 /*
@@ -32,19 +32,20 @@ extern "C" {
 
 #include <complex.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include <math.h>
 
 // Externally Accessible Data Elements
     
 struct PSK {
-    float m_freqEstimate;
-    float m_freqFineEstimate;
-    float m_signalRMS;
-    float m_noiseRMS;
-    float m_snrEstimate;
-    int m_sync;
-    int m_nin;
-    int m_clip;
+    float freqEstimate;
+    float freqFineEstimate;
+    float signalRMS;
+    float noiseRMS;
+    float snrEstimate;
+    int nin;
+    bool sync;
+    bool clip;
 };
 
 /*
@@ -58,38 +59,38 @@ struct PSK {
 
 #define TAU             (M_PI * 2.0f)
 #define ROT45           (M_PI / 4.0f)
+#define SCALE           8192.0f
 
 #define PSK_RS          1600.0f
 #define PSK_FS          8000.0f
 #define PSK_CENTER      1100.0f
 #define PSK_CYCLES      (int) (PSK_FS / PSK_RS)
 #define PSK_M           100
-#define SCALE           8192.0f
 
 /*
- * This method is much faster than using cexp()
+ * This method is much faster than using cexp(j)
  * float_value - must be a float
  */
 #define cmplx(float_value) (cosf(float_value) + sinf(float_value) * I)
 #define cmplxconj(float_value) (cosf(float_value) + sinf(float_value) * -I)
 
-#define PSK_SYMBOLS                  32
-#define PSK_DATA_ROWS                7
+#define PSK_SYMBOLS     32
+#define PSK_DATA_ROWS   7
+#define SAMPLING_POINTS 2
 
 // 7 rows * 32 QPSK symbols
 #define PSK_DATA_SYMBOLS_PER_FRAME   (PSK_SYMBOLS * PSK_DATA_ROWS)
     
 // 1 row * 32 BPSK symbols
 #define PSK_PILOT_SYMBOLS_PER_FRAME  PSK_SYMBOLS
-    
+
+// (1 rows * 32 BPSK symbols) * 1 bit
+#define PSK_PILOT_BITS_PER_FRAME     PSK_SYMBOLS    
+
 // (7 rows * 32 QPSK symbols) * 2 bits
 #define PSK_DATA_BITS_PER_FRAME      (PSK_SYMBOLS * PSK_DATA_ROWS) * 2
-    
-// (1 rows * 32 BPSK symbols) * 1 bit
-#define PSK_PILOT_BITS_PER_FRAME     PSK_SYMBOLS
 
 #define PSK_FRAME                    (PSK_PILOT_SYMBOLS_PER_FRAME + PSK_DATA_SYMBOLS_PER_FRAME)
-#define PSK_SYMBOL_BUF               (PSK_FRAME + 2)
 
 #define PSK_CLIP_AMP                 6.5f
 
