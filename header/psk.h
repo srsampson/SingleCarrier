@@ -1,10 +1,10 @@
 /*---------------------------------------------------------------------------*\
   
-  FILE........: psk.h
+  FILE........: pskdv.h
   AUTHORS.....: David Rowe & Steve Sampson
   DATE CREATED: November 2020
 
-  A 1600 baud QPSK voice modem library
+  A 1600 baud QPSK Digital Voice modem library
 
 \*---------------------------------------------------------------------------*/
 /*
@@ -39,38 +39,44 @@ struct PSK;
 
 /*
  * Functions to start and stop modem
- * Create returns -1 on memory failure
- * returns 0 if no errors
+ * Create returns 0 on memory failure
+ * returns 1 if no errors
  */
+int psk_create(void);
 
-int psk_create(void);     /* create the modem instance */
-void psk_destroy(void);   /* close down modem gracefully */
+void psk_destroy(void);
 
 /*
- * Function to return an IQ PCM 16-bit 2-Channel waveform at 8 kHz rate.
+ * Function to produce PCM 16-bit 1-Channel waveform at 8 kHz rate.
  *
- * @param waveform complex array of the modulated IQ data and pilots frame
- * @param bits int array of the data only bits (7 * 31 * 2) = 434 bits
- * @return int the number of complex IQ samples (2480 16-bit PCM samples)
+ * @param 1 BPSK pilot 1-Channel 32 symbol waveform
  */
-int psk_modulate(int16_t [], int []);
+void psk_pilot_modulate(int16_t []);
 
 /*
- * Function to receive bits from demodulated complex IQ signals
- * 
- * @param 1 a unsigned byte array of the decoded bits
- * @param 2 a complex array of the IQ modulated complex signal
- * @return sync a int set to show sync state
+ * Function to produce PCM 16-bit 1-Channel waveform at 8 kHz rate.
+ *
+ * @param 1 QPSK data 1-Channel 32 symbol waveform
+ * @param 2 bits int array of the data bits (32 symbols * 2 bits) = 64 bits
  */
-int psk_receive(uint8_t [], complex float []);
+void psk_data_modulate(int16_t [], int []);
+
+/*
+ * Function to receive bits from 1-Channel Real 8 kHz sample rate signal
+ * 
+ * @param 1 an unsigned byte array of the decoded bits
+ * @param 2 sync boolean to show sync state
+ * @param 3 a real 1-Channel waveform 8 kHz sample rate signal
+ */
+void psk_receive(uint8_t [], bool *, float []);
 
 float psk_get_SNR(void);
 int psk_get_SYNC(void);
 int psk_get_NIN(void);
-float psk_get_frequency_estimate();
-float psk_get_fine_frequency_estimate();
-int psk_get_clip(void);
-void psk_set_clip(int);
+float psk_get_frequency_estimate(void);
+float psk_get_fine_frequency_estimate(void);
+bool psk_get_clip(void);
+void psk_set_clip(bool);
 
 #ifdef	__cplusplus
 }
