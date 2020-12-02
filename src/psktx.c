@@ -1,10 +1,10 @@
 /*---------------------------------------------------------------------------*\
 
-  FILE........: psktx.c
+  FILE........: pskdv_tx.c
   AUTHORS.....: David Rowe & Steve Sampson
   DATE CREATED: November 2020
 
-  A 1600 baud QPSK voice modem library
+  A 1600 baud QPSK Digital Voice modem library
 
 \*---------------------------------------------------------------------------*/
 /*
@@ -24,55 +24,39 @@
   along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "psk_internal.h"
+#include "pskdv_internal.h"
 #include "fir.h"
 
 // Externals
 
-extern struct PSK *psk;
-extern complex float pilots[];
-extern const complex float constellation[];
-extern complex float fcenter;
-extern complex phaseTx;
+extern struct PSK *e_psk;
+extern complex float e_pilots[];
+extern complex float e_fcenter;
+extern complex e_phaseTx;
 
 // Prototypes
 
 static void upconvert(complex float [], complex float[]);
-static void bitsToConstellation(complex float [], int []);
+static void clip(int16_t [], complex float [], int length);
 
 // Locals
 
-static complex float tx_filter[NTAPS];
+static complex float m_tx_filter[NTAPS];
+
+/*
+ * QPSK/BPSK Constellation - Gray Code
+ */
+static const complex float m_constellation[] = {
+     1.0f + 0.0f * I,   // BPSK +1
+     0.0f + 1.0f * I,
+     0.0f - 1.0f * I,
+    -1.0f + 0.0f * I    // BPSK -1
+};
 
 // Functions
 
-/*
- * Function to return an IQ PCM 16-bit 2-Channel waveform at 8 kHz rate.
- *
- * @param waveform complex array of the modulated IQ data and pilots frame
- * @param bits int array of the data only bits (7 * 31 * 2) = 434 bits
- * @return int the number of complex IQ samples (2480 16-bit PCM samples)
- */
-int psk_modulate(int16_t waveform[], int bits[]) {
-    complex float tx_symb[PSK_FRAME];
-
-    /*
-     * tx_symb will have the constellation symbols
-     * as determined by the bit pairs at 1600 baud
-     */
-    bitsToConstellation(tx_symb, bits);
-
-    // length increased now by PSK_CYCLES
-
-    int length = PSK_FRAME * PSK_CYCLES;
-    
-    complex float spectrum[length];
-    
-    // create the PSK modem frame (8 kHz rate)
-
-    upconvert(spectrum, tx_symb);
-    
-    if (psk->m_clip) {
+static void clip(int16_t waveform[], complex float spectrum[], int length) {
+    if (e_psk->clip == true) {
         /*
          * Reduce Crest Factor by about 2 dB
          * this will typically occur about 5% of the signal samples
@@ -86,59 +70,82 @@ int psk_modulate(int16_t waveform[], int bits[]) {
         }
     }
 
-    // (7 rows * 31 QPSK data + 31 BPSK pilots) = 248 symbols at 1600 Hz
-    // Multiply by 5 CYCLES to get 8 kHz rate = 1240 IQ samples
-    // 2-Channel IQ PCM 16-bit is then sent (2480)
+    // 32 PSK real data at 8 kHz sample rate
 
-    for (int i = 0, j = 0; i < length; i++, j += 2) {
-        waveform[j] = (int16_t) (crealf(spectrum[i]) / SCALE);
-        waveform[j+1] = (int16_t) (cimagf(spectrum[i]) / SCALE);
+    for (int i = 0; i < length; i++) {
+        waveform[i] = (int16_t) (crealf(spectrum[i]) / SCALE);
     }
-
-    // We now have 1240 * 2 = 2480 for 2-Channel PCM 16-bit
-
-    return length * 2;
 }
 
 /*
- * QPSK Modulate the data and pilot bits
- * 
- * @param symbols the modulated pilot and data bits
- * @param bits the data bits to be modulated
+ * Function to produce PCM 16-bit 1-Channel waveform at 8 kHz rate.
+ *
+ * @param 1 BPSK pilot 1-Channel waveform
  */
-static void bitsToConstellation(complex float symbols[], int bits[]) {
-    // First do the pilot symbols...
+void psk_pilot_modulate(int16_t waveform[]) {
+    complex float tx_symb[PSK_SYMBOLS];
 
-    for (int i = 0; i < PSK_PILOT_SYMBOLS_PER_FRAME; i++) {
-        symbols[i] = pilots[i];
+    for (int i = 0; i < PSK_SYMBOLS; i++) {
+        tx_symb[i] = e_pilots[i];
     }
+    
+    // Interpolate by PSK_CYCLES
 
-    // ...then add the data symbols
+    int length = PSK_SYMBOLS * PSK_CYCLES;
+    
+    complex float spectrum[length];
+    
+    // create the QPSK modem frame (8 kHz rate)
 
-    for (int i = 0, j = PSK_PILOT_SYMBOLS_PER_FRAME;
-            i < PSK_DATA_SYMBOLS_PER_FRAME; i++, j++) {
+    upconvert(spectrum, tx_symb);
+    
+    clip(waveform, spectrum, length);
+}
+
+/*
+ * Function to produce PCM 16-bit 1-Channel waveform at 8 kHz rate.
+ *
+ * @param 1 QPSK data 1-Channel waveform
+ * @param 2 bits int array of the data only bits (32 symbols * 2 bits) = 64 bits
+ */
+void psk_data_modulate(int16_t waveform[], int bits[]) {
+    complex float tx_symb[PSK_SYMBOLS];
+
+    for (int i = 0; i < PSK_SYMBOLS; i++) {
         // Sends IQ, IQ ... IQ or I = Odd Bits Q = Even Bits
         int bitPair = ((bits[(i * 2)] & 0x01) << 1) | (bits[(i * 2) + 1] & 0x01);
 
-        symbols[j] = constellation[bitPair];
+        tx_symb[i] = m_constellation[bitPair];
     }
+    
+    // Interpolate by PSK_CYCLES
+
+    int length = PSK_SYMBOLS * PSK_CYCLES;
+    
+    complex float spectrum[length];
+    
+    // create the QPSK modem frame (8 kHz rate)
+
+    upconvert(spectrum, tx_symb);
+    
+    clip(waveform, spectrum, length);
 }
 
 /*
- * Mix the baseband signal into the output waveform.
+ * Mix the BPSK or QPSK 32 symbol baseband signal up to center frequency.
  * 
- * @param waveform the complex output signal centered on freq
+ * @param waveform the complex output signal center frequency
  * @param baseband the input baseband signal to be mixed
  */
 static void upconvert(complex float spectrum[], complex float baseband[]) {
-    int length = (PSK_FRAME * PSK_CYCLES);
+    int length = (PSK_SYMBOLS * PSK_CYCLES);
     complex float signal[length];
 
     /*
      * Build the 1600 baud packet Frame zero padding
      * for the desired 8 kHz sample rate.
      */
-    for (int i = 0; i < PSK_FRAME; i++) {
+    for (int i = 0; i < length; i++) {
         signal[(PSK_CYCLES * i)] = baseband[i];
 
         for (int j = 1; j < PSK_CYCLES; j++) {
@@ -149,16 +156,16 @@ static void upconvert(complex float spectrum[], complex float baseband[]) {
     /*
      * Raised Root Cosine Filter
      */
-    fir(tx_filter, signal, length);
+    fir(m_tx_filter, signal, length);
 
     /*
      * Shift Baseband up to Center Frequency
      */
     for (int i = 0; i < length; i++) {
-        phaseTx *= fcenter;
-        spectrum[i] = signal[i] * phaseTx;
+        e_phaseTx *= e_fcenter;
+        spectrum[i] = signal[i] * e_phaseTx;
     }
     
     /* Normalize phase */
-    phaseTx /= cabsf(phaseTx);
+    e_phaseTx /= cabsf(e_phaseTx);
 }
