@@ -37,8 +37,7 @@ extern "C"
 #include <stdint.h>
 #include <math.h> 
 
-#define TX_FILENAME "/tmp/spectrum-filtered.raw"
-#define RX_FILENAME "/tmp/spectrum.raw"
+#define TX_FILENAME "/tmp/spectrum.raw"
 
 /* manual/hard coded fine timing estimation for now */
 #define FINE_TIMING_OFFSET 3
@@ -50,16 +49,20 @@ extern "C"
 #define CENTER          1100.0f
 
 #define NS              8
-#define PILOT_SYMBOLS   33
-#define DATA_SYMBOLS    31
+#define PILOT_SYMBOLS   32
+#define DATA_SYMBOLS    32
 #define FRAME_SYMBOLS   (DATA_SYMBOLS * NS)
 
 #define PILOT_SAMPLES   (PILOT_SYMBOLS * CYCLES)
 #define DATA_SAMPLES    (DATA_SYMBOLS * CYCLES * NS)
-#define FRAME_SIZE      1405
+
+/*
+ * Frame size is (pilot samples + (ns * data samples)) * cycles
+ */
+#define FRAME_SIZE      1440
 
 // (DATA_SYMBOLS * 2 bits * NS)
-#define BITS_PER_FRAME  496
+#define BITS_PER_FRAME  512
 
 #ifndef M_PI
 #define M_PI            3.14159265358979323846f
@@ -69,7 +72,7 @@ extern "C"
 #define ROT45           (M_PI / 4.0f)
 
 /*
- * This method is much faster than using cexp()
+ * This method is much faster than using cexp(j)
  * float_value - must be a float
  */
 #define cmplx(float_value) (cosf(float_value) + sinf(float_value) * I)
