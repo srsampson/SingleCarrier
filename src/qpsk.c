@@ -6,7 +6,7 @@
  * qpsk.c
  *
  * Testing program for qpsk modem algorithms
- * January 2021
+ * January 24, 2021
  */
 
 // Includes
