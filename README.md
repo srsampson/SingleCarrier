@@ -14,3 +14,7 @@ $ make test_scatter
 ```
 Then view `scatter.png`
 
+#### Development
+The PSK signal may be both offset in frequency, and in phase, between multiple stations. Thus to get a good scatter diagram, you need to be tuned-in. You can find the frequency using the phase information.
+
+What I'm thinking of, is using a maximal-length LFSR BPSK preamble in which the phase of each symbol and the start of the data packet is determined. Using a tracking filter to lock-on to the phase and frequency. Then as each QPSK data symbol comes in, update the tracking filter with the measured phase. Thus the tracking filter is the heart of the demodulator being successful.
