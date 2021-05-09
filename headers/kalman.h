@@ -28,7 +28,6 @@ extern "C"
 void init_kalman(void);
 void kalman_reset(void);
 void kalman_update(complex float [], complex float [], int, complex float);
-void display_filter(complex float *);
 
 #ifdef __cplusplus
 }
