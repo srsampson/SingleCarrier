@@ -14,7 +14,6 @@
 
 #include <math.h>
 
-#include "v32.h"
 #include "kalman.h"
 
 // Locals
