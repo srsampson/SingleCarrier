@@ -17,12 +17,6 @@
 extern "C" {
 #endif
 
-#include <complex.h>
-#include <stddef.h>
-#include <stdlib.h>
-#include <math.h>
-#include <string.h>
-
 #include "qpsk_internal.h"
     
 /* Complex FFT */
