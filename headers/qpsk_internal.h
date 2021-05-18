@@ -14,11 +14,13 @@ extern "C"
 
 #include <stdio.h>
 #include <complex.h>
+#include <stdlib.h>
 #include <stddef.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <math.h> 
-    
+#include <string.h>
+
 #define FINE_TIMING_OFFSET 3
 
 #define TX_FILENAME "/tmp/spectrum-filtered.raw"
