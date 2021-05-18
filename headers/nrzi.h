@@ -1,5 +1,5 @@
 /*
- * fir.h
+ * nrzi.h
  * 
  * Licensed under GNU LGPL V2.1
  * See LICENSE file for information
@@ -8,18 +8,18 @@
 #pragma once
 
 #ifdef __cplusplus
-extern "C" {
+extern "C"
+{
 #endif
 
-#include <complex.h>
 #include <stddef.h>
+#include <stdint.h>
 
-#define NTAPS           49
-#define GAIN            2.2f
+static int nrzi_state;
 
-void fir(complex float [], bool, complex float [], int);
+void nrzi_init(void);
+void nrzi(uint8_t [], uint8_t [], int);
 
 #ifdef __cplusplus
 }
 #endif
-

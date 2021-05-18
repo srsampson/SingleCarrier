@@ -1,27 +1,44 @@
 /*
  * equalizer.c
- *
+ * 
  * Licensed under GNU LGPL V2.1
  * See LICENSE file for information
  */
 
+#include <complex.h>
 #include <math.h>
 
 #include "kalman.h"
 #include "equalizer.h"
+#include "qpsk_internal.h"
+#include "scramble.h"
 
-// Globals
+// Externals
 
-static complex float c_eq[EQ_LENGTH];
+extern complex float eq_coeff[];
+extern complex float kalman_gain[];
+extern float kalman_y;
 
 // Functions
 
-void reset_eq() {
-    for (int i = 0; i < EQ_LENGTH; i++) {
-        c_eq[i] = 0.0f;
-    }
+/*
+ * Update coefficients using gain vector and error
+ */
+static void update_eq(complex float in[], int index, complex float error) {
+    /*
+     * Calculate the new gain
+     */
+    kalman_calculate(in, index);
 
-    kalman_reset();
+    /*
+     * Create filter coefficients using
+     * the kalman gain and error (uncertainty)
+     */
+    error *= kalman_y;
+    
+    for (size_t i = 0; i < EQ_LENGTH; i++) {
+        eq_coeff[i] += (error * conjf(kalman_gain[i]));
+    }
 }
 
 /*
@@ -30,37 +47,49 @@ void reset_eq() {
 float train_eq(complex float in[], int index, float ref) {
     complex float val = 0.0f;
 
-    for (int i = 0, j = index; i < EQ_LENGTH; i++, j++) {
-        val += (in[j] * c_eq[i]);
+    for (size_t i = 0, j = index; i < EQ_LENGTH; i++, j++) {
+        val += (in[j] * eq_coeff[i]);
     }
 
     /* Calculate error */
     complex float error = conjf(ref - val);
 
-    kalman_update(c_eq, in, index, error);
+    update_eq(in, index, error);
 
     return crealf(error);
 }
 
 /*
- *  Returns the path metric for the symbol
+ * Returns the bits, and distance for the PSK symbol
+ * and updates the equalization filter
  */
-float data_eq(complex float in[], int index) {
-    complex float symbol = 0.0f;
+float data_eq(uint8_t *bits, complex float in[], int index) {
+    uint8_t dibit[2]; // IQ bit values
 
-    for (int i = 0, j = index; i < EQ_LENGTH; i++, j++) {
-        symbol += (in[j] * c_eq[i]);
+    complex float symbol = 0.0f;
+    
+    for (size_t i = 0, j = index; i < EQ_LENGTH; i++, j++) {
+        symbol += (in[j] * conjf(eq_coeff[i]));
     }
 
-    symbol = conjf(symbol);
+    qpsk_demod(dibit, symbol);
 
-    /* Symbol decode */
-    Rxed rb = rx_symbol(symbol);
+    float i = (dibit[1] == 1) ? -1.0f : 1.0f; // I Odd
+    float q = (dibit[0] == 1) ? -1.0f : 1.0f; // Q Even
+
+    complex float constellation = i + q * I;
 
     /* Calculate error */
-    complex float error = (rb.rx_symb - symbol) * 0.1f;
+    complex float error = (constellation - symbol) * 0.1f;
 
-    kalman_update(c_eq, in, index, error);
+    update_eq(in, index, error);
 
-    return rb.cost;
+    uint8_t sdata = (dibit[1] << 1) | dibit[0]; // IQ
+
+    //No scramble for now                  TODO
+    //*bits = scrambleRX(sdata);
+
+    *bits = sdata;
+
+    return crealf(error);
 }

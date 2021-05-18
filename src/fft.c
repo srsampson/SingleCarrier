@@ -1,4 +1,6 @@
 /*
+ * fft.c
+ * 
  * Copyright (c) 2003-2004, Mark Borgerding
  *
  * All rights reserved.
@@ -29,6 +31,8 @@
  *
  * Modified March 2020 by Steve Sampson
  */
+
+#include <complex.h>
 
 #include "fft.h"
 
@@ -63,7 +67,7 @@ fft_cfg fft_alloc(int nfft, int inverse_fft, void *mem, size_t *lenmem) {
         st->nfft = nfft;
         st->inverse = inverse_fft;
 
-        for (int i = 0; i < nfft; i++) {
+        for (size_t i = 0; i < nfft; i++) {
             float phase = -TAU * (float) i / (float) nfft;
 
             if (inverse_fft)
@@ -111,7 +115,7 @@ fftr_cfg fftr_alloc(int nfft, int inverse_fft, void *mem, size_t *lenmem) {
 
     fft_alloc(nfft, inverse_fft, st->substate, &subsize);
 
-    for (int i = 0; i < nfft / 2; ++i) {
+    for (size_t i = 0; i < nfft / 2; ++i) {
         float phase = -M_PI * ((float) (i + 1) / (float) nfft + .5f);
 
         if (inverse_fft) {
@@ -144,7 +148,7 @@ void encode_fftr(fftr_cfg st, const float *timedata, complex float *freqdata) {
     freqdata[0] = (crealf(tdc) + cimagf(tdc)) + 0.0f * I;
     freqdata[ncfft] = (crealf(tdc) - cimagf(tdc)) + 0.0f * I;
 
-    for (int k = 1; k <= (ncfft / 2); k++) {
+    for (size_t k = 1; k <= (ncfft / 2); k++) {
         fpk = st->tmpbuf[k];
         fpnk = conjf(st->tmpbuf[ncfft - k]);
 
@@ -167,7 +171,7 @@ void encode_fftri(fftr_cfg st, const complex float *freqdata, float *timedata) {
     st->tmpbuf[0] = (crealf(freqdata[0]) + crealf(freqdata[ncfft])) +
             (crealf(freqdata[0]) - crealf(freqdata[ncfft])) * I;
 
-    for (int k = 1; k <= (ncfft / 2); k++) {
+    for (size_t k = 1; k <= (ncfft / 2); k++) {
         fk = freqdata[k];
         fnkc = conjf(freqdata[ncfft - k]);
 
@@ -302,7 +306,7 @@ static void kf_bfly5(
     Fout3 = Fout0 + 3 * m;
     Fout4 = Fout0 + 4 * m;
 
-    for (int u = 0; u < m; u++) {
+    for (size_t u = 0; u < m; u++) {
         scratch[0] = *Fout0;
 
         scratch[1] = *Fout1 * tw[fstride * u];
@@ -351,20 +355,20 @@ static void kf_bfly_generic(
 
     complex float *scratch = (complex float *) malloc(sizeof (complex float) * p);
 
-    for (int u = 0; u < m; u++) {
+    for (size_t u = 0; u < m; u++) {
         int k = u;
 
-        for (int q1 = 0; q1 < p; q1++) {
+        for (size_t q1 = 0; q1 < p; q1++) {
             scratch[q1] = Fout[ k ];
             k += m;
         }
 
         k = u;
-        for (int q1 = 0; q1 < p; q1++) {
+        for (size_t q1 = 0; q1 < p; q1++) {
             int twidx = 0;
             Fout[ k ] = scratch[0];
 
-            for (int q = 1; q < p; q++) {
+            for (size_t q = 1; q < p; q++) {
                 twidx += fstride * k;
 
                 if (twidx >= Norig)

@@ -1,4 +1,6 @@
 /*
+ * fft.h
+ * 
  * Copyright (C) 2003-2004, Mark Borgerding
  *
  * All rights reserved.
@@ -16,6 +18,7 @@ extern "C" {
 #endif
 
 #include <complex.h>
+#include <stddef.h>
 #include <stdlib.h>
 #include <math.h>
 #include <string.h>

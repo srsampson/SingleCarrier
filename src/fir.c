@@ -1,27 +1,8 @@
-/*---------------------------------------------------------------------------*\
-
-  FILE........: fir.c
-  AUTHORS.....: David Rowe & Steve Sampson
-  DATE CREATED: October 2020
-
-  A FIR filter used to implement a QPSK modem
-
-\*---------------------------------------------------------------------------*/
 /*
-  Copyright (C) 2020 David Rowe
-
-  All rights reserved.
-
-  This program is free software; you can redistribute it and/or modify
-  it under the terms of the GNU Lesser General Public License version 2.1, as
-  published by the Free Software Foundation.  This program is
-  distributed in the hope that it will be useful, but WITHOUT ANY
-  WARRANTY; without even the implied warranty of MERCHANTABILITY or
-  FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
-  License for more details.
-
-  You should have received a copy of the GNU Lesser General Public License
-  along with this program; if not, see <http://www.gnu.org/licenses/>.
+ * fir.c
+ * 
+ * Licensed under GNU LGPL V2.1
+ * See LICENSE file for information
  */
 
 #include "qpsk_internal.h"
@@ -29,13 +10,24 @@
 
 // Externals
 
+extern const float alpha35_root[];
 extern const float alpha50_root[];
+
+// Locals
+
+static const float *coeff;
 
 /*
  * FIR Filter with specified impulse length used at 8 kHz
  */
-void fir(complex float memory[], complex float sample[], int length) {
-    for (int j = 0; j < length; j++) {
+void fir(complex float memory[], bool choice, complex float sample[], int length) {
+    if (choice == true) {
+        coeff = alpha50_root;
+    } else {
+        coeff = alpha35_root;
+    }
+
+    for (size_t j = 0; j < length; j++) {
         for (int i = 0; i < (NTAPS - 1); i++) {
             memory[i] = memory[i + 1];
         }
@@ -44,8 +36,8 @@ void fir(complex float memory[], complex float sample[], int length) {
 
         complex float y = 0.0f;
 
-        for (int i = 0; i < NTAPS; i++) {
-            y += (memory[i] * alpha50_root[i]);
+        for (size_t i = 0; i < NTAPS; i++) {
+            y += (memory[i] * coeff[i]);
         }
 
         sample[j] = y * GAIN;

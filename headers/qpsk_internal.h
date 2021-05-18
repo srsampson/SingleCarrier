@@ -1,27 +1,8 @@
-/*---------------------------------------------------------------------------*\
-
-  FILE........: qpsk_internal.h
-  AUTHORS.....: David Rowe & Steve Sampson
-  DATE CREATED: October 2020
-
-  A Library of functions that implement a QPSK modem
-
-\*---------------------------------------------------------------------------*/
 /*
-  Copyright (C) 2020 David Rowe
-
-  All rights reserved.
-
-  This program is free software; you can redistribute it and/or modify
-  it under the terms of the GNU Lesser General Public License version 2.1, as
-  published by the Free Software Foundation.  This program is
-  distributed in the hope that it will be useful, but WITHOUT ANY
-  WARRANTY; without even the implied warranty of MERCHANTABILITY or
-  FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
-  License for more details.
-
-  You should have received a copy of the GNU Lesser General Public License
-  along with this program; if not, see <http://www.gnu.org/licenses/>.
+ * qpsk_internal.h
+ *
+ * Licensed under GNU LGPL V2.1
+ * See LICENSE file for information
  */
 
 #pragma once
@@ -33,14 +14,19 @@ extern "C"
 
 #include <stdio.h>
 #include <complex.h>
+#include <stddef.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <math.h> 
 
-#define TX_FILENAME "/tmp/spectrum.raw"
-
-/* manual/hard coded fine timing estimation for now */
 #define FINE_TIMING_OFFSET 3
+
+#define TX_FILENAME "/tmp/spectrum-filtered.raw"
+#define RX_FILENAME "/tmp/databits.txt"
+    
+#define EOF_COST_VALUE  5.0f
+    
+#define EQ_LENGTH       5
 
 #define FS              8000.0f
 #define RS              1600.0f
@@ -49,20 +35,17 @@ extern "C"
 #define CENTER          1100.0f
 
 #define NS              8
-#define PILOT_SYMBOLS   32
-#define DATA_SYMBOLS    32
+#define DATA_SYMBOLS    31
 #define FRAME_SYMBOLS   (DATA_SYMBOLS * NS)
-
-#define PILOT_SAMPLES   (PILOT_SYMBOLS * CYCLES)
 #define DATA_SAMPLES    (DATA_SYMBOLS * CYCLES * NS)
 
-/*
- * Frame size is (pilot samples + (ns * data samples)) * cycles
- */
-#define FRAME_SIZE      1440
+// Frame Size = DATA_SYMBOLS * NS * CYCLES
+#define FRAME_SIZE      1240
 
 // (DATA_SYMBOLS * 2 bits * NS)
-#define BITS_PER_FRAME  512
+#define BITS_PER_FRAME  496
+
+#define PREAMBLE_LENGTH 128
 
 #ifndef M_PI
 #define M_PI            3.14159265358979323846f
@@ -72,27 +55,20 @@ extern "C"
 #define ROT45           (M_PI / 4.0f)
 
 /*
- * This method is much faster than using cexp(j)
+ * This method is much faster than using cexp()
  * float_value - must be a float
  */
 #define cmplx(float_value) (cosf(float_value) + sinf(float_value) * I)
 #define cmplxconj(float_value) (cosf(float_value) + sinf(float_value) * -I)
 
-typedef struct
-{
-    int data;
-    int tx_symb;
-    float cost;
-    complex float rx_symb;
-} Rxed;
+// Prototypes
 
-/* modem state machine states */
+float cnormf(complex float);
 
-typedef enum
-{
-    hunt,
-    process
-} State;
+complex float qpsk_mod(uint8_t [], int);
+void qpsk_demod(uint8_t bits[], complex float symbol);
+int qpsk_rx_frame(int16_t [], uint8_t []);
+int qpsk_tx_frame(int16_t [], complex float [], int);
 
 #ifdef __cplusplus
 }

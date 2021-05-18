@@ -13,26 +13,18 @@ extern "C"
 #endif
 
 #include <complex.h>
-
-typedef struct
-{
-    complex float rx_symb;
-    float cost;
-    int data;
-    int tx_symb;
-} Rxed;
+#include <stddef.h>
+#include <stdint.h>
 
 typedef enum
 {
     hunt,
     process
-} RxState;
+} RXState;
 
-void reset_eq(void);
 float train_eq(complex float [], int, float);
-float data_eq(complex float [], int);
+float data_eq(uint8_t *, complex float [], int);
 
 #ifdef __cplusplus
 }
 #endif
-
