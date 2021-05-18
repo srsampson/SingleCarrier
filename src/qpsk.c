@@ -16,6 +16,8 @@
 #include <time.h>
 
 #include "qpsk_internal.h"
+#include "equalizer.h"
+#include "kalman.h"
 #include "scramble.h"
 #include "fir.h"
 

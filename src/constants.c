@@ -3,9 +3,6 @@
  * See LICENSE file for information
  */
 
-#include <stdint.h>
-#include <complex.h>
-
 #include "qpsk_internal.h"
 
 /*

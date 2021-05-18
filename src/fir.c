@@ -5,7 +5,6 @@
  * See LICENSE file for information
  */
 
-#include "qpsk_internal.h"
 #include "fir.h"
 
 // Externals

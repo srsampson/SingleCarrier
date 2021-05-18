@@ -13,6 +13,7 @@ extern "C" {
 
 #include <complex.h>
 #include <stddef.h>
+#include <stdbool.h>
 
 #define NTAPS           49
 #define GAIN            2.2f

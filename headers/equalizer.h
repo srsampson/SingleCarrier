@@ -16,11 +16,7 @@ extern "C"
 #include <stddef.h>
 #include <stdint.h>
 
-typedef enum
-{
-    hunt,
-    process
-} RXState;
+#include "qpsk_internal.h"
 
 float train_eq(complex float [], int, float);
 float data_eq(uint8_t *, complex float [], int);

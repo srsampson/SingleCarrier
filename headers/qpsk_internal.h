@@ -18,7 +18,7 @@ extern "C"
 #include <stdbool.h>
 #include <stdint.h>
 #include <math.h> 
-
+    
 #define FINE_TIMING_OFFSET 3
 
 #define TX_FILENAME "/tmp/spectrum-filtered.raw"
@@ -60,6 +60,14 @@ extern "C"
  */
 #define cmplx(float_value) (cosf(float_value) + sinf(float_value) * I)
 #define cmplxconj(float_value) (cosf(float_value) + sinf(float_value) * -I)
+
+// Enum
+    
+typedef enum
+{
+    hunt,
+    process
+} RXState;
 
 // Prototypes
 
