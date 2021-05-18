@@ -16,6 +16,7 @@
 #include <math.h>
 
 #include "qpsk_internal.h"
+#include "kalman.h"
 
 // Globals
 
