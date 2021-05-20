@@ -6,14 +6,6 @@ The design is driven by the FreeDV 2020 Specifications which were originally des
 
 1600 Baud QPSK or 2-bits per symbol is 3000 bit/sec. The pilots use BPSK for both coherency and in this modem can also be used for syncronization. One (1) frame of BPSK pilots/sync, and eight (8) frames of QPSK data.
 
-#### Building from git clone & scatter diagram tests
-
-```
-$ make qpsk
-$ make test_scatter
-```
-Then view `scatter.png`
-
 #### Development
 The PSK signal may be both offset in frequency, and in phase, between multiple stations. Thus to get a good scatter diagram, you need to be tuned-in. You can find the frequency using the phase information.
 
