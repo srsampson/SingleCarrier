@@ -11,9 +11,7 @@
 extern "C" {
 #endif
 
-#include <complex.h>
-#include <stddef.h>
-#include <stdbool.h>
+#include "qpsk_internal.h"
 
 #define NTAPS           49
 #define GAIN            2.2f

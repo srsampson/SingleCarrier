@@ -12,10 +12,6 @@ extern "C"
 {
 #endif
 
-#include <complex.h>
-#include <stddef.h>
-#include <stdint.h>
-
 #include "qpsk_internal.h"
 
 float train_eq(complex float [], int, float);

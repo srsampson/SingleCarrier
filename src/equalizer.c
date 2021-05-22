@@ -5,12 +5,10 @@
  * See LICENSE file for information
  */
 
-#include <complex.h>
-#include <math.h>
+#include "qpsk_internal.h"
 
 #include "kalman.h"
 #include "equalizer.h"
-#include "qpsk_internal.h"
 #include "scramble.h"
 
 // Externals
@@ -84,12 +82,9 @@ float data_eq(uint8_t *bits, complex float in[], int index) {
 
     update_eq(in, index, error);
 
-    uint8_t sdata = (dibit[1] << 1) | dibit[0]; // IQ
+    *bits = (dibit[1] << 1) | dibit[0]; // IQ
 
-    //No scramble for now                  TODO
-    //*bits = scrambleRX(sdata);
-
-    *bits = sdata;
+    scramble(bits, rx);
 
     return crealf(error);
 }

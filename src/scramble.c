@@ -4,6 +4,8 @@
  * Licensed under GNU LGPL V2.1
  * See LICENSE file for information
  *
+ * Full Duplex Capable, using TX/RX registers
+ * 
  * Note: This is not a Cryptographic Scrambler, it is a Bit Scrambler.
  *
  * This Linear Feedback Shift Register is taken from the Digital Video
@@ -29,54 +31,54 @@
  *
  * The scrambler is important for modems that don't use NRZI and bit-stuffing
  * 
- * Functions duplicated for Full-Duplex operation.
+ * Full-Duplex capable
  */
 
 #include "scramble.h"
 
 // Locals
 
-static uint16_t scrambleTXMemory;
-static uint16_t scrambleRXMemory;
+static uint16_t TXMemory;
+static uint16_t RXMemory;
 
 // Functions
 
-void resetTXScrambler() {
-    scrambleTXMemory = SEED;
+void scramble_init(SRegister sr) {
+    if (sr == tx) {
+        TXMemory = SEED;
+    } else if (sr == rx) {
+        RXMemory = SEED;
+    } else if (sr == both) {
+        TXMemory = SEED;
+        RXMemory = SEED;
+    }
 }
 
-void resetRXScrambler() {
-    scrambleRXMemory = SEED;
-}
-
-uint8_t scrambleTX(uint8_t input) {
+static void scramble_internal(uint8_t *input, uint16_t *memory) {
     for (size_t i = 0; i < BITS; i++) {
-        uint16_t scrambler_out = (uint16_t) (((scrambleTXMemory & 0x2) >> 1) ^ (scrambleTXMemory & 0x1));
-        uint16_t bits = (uint16_t) (((input >> i) & 0x1) ^ scrambler_out);
+        uint16_t scrambler_out = (uint16_t) (((*memory & 0x2) >> 1) ^ (*memory & 0x1));
+        uint16_t bits = (uint16_t) (((*input >> i) & 0x1) ^ scrambler_out);
 
-        input &= ~(1 << i);
-        input |= (bits << i);
+        *input &= ~(1 << i);
+        *input |= (bits << i);
 
         /* update scrambler memory */
-        scrambleTXMemory >>= 1;
-        scrambleTXMemory |= (scrambler_out << 14);
+        *memory >>= 1;
+        *memory |= (scrambler_out << 14);
     }
-    
-    return input;
 }
 
-uint8_t scrambleRX(uint8_t input) {
-    for (size_t i = 0; i < BITS; i++) {
-        uint16_t scrambler_out = (uint16_t) (((scrambleRXMemory & 0x2) >> 1) ^ (scrambleRXMemory & 0x1));
-        uint16_t bits = (uint16_t) (((input >> i) & 0x1) ^ scrambler_out);
-
-        input &= ~(1 << i);
-        input |= (bits << i);
-
-        /* update scrambler memory */
-        scrambleRXMemory >>= 1;
-        scrambleRXMemory |= (scrambler_out << 14);
+/*
+ * Returns -1 on error
+ */
+int scramble(uint8_t *input, SRegister sr) {
+    if (sr == tx) {
+        scramble_internal(input, &TXMemory);
+    } else if (sr == rx) {
+        scramble_internal(input, &RXMemory);
+    } else if (sr == both) {
+        return -1;
     }
     
-    return input;
+    return 0;
 }

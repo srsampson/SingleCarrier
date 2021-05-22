@@ -19,9 +19,7 @@ extern "C"
 {
 #endif
 
-#include <complex.h>
-#include <stddef.h>
-#include <math.h>
+#include "qpsk_internal.h"
 
 // Defines
 

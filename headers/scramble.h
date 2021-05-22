@@ -7,24 +7,28 @@
 
 #pragma once
 
-#ifdef	__cplusplus
-extern "C"
-{
+#ifdef __cplusplus
+extern "C" {
 #endif
 
-#include <stddef.h>
-#include <stdint.h>
+#include "qpsk_internal.h"
 
 #define SEED 0x4A80
 #define BITS 2
 
+/* Constants  */
+
+typedef enum {
+    tx,
+    rx,
+    both
+} SRegister;
+
 /* Prototypes */
 
-void resetTXScrambler(void);
-void resetRXScrambler(void);
-uint8_t scrambleTX(uint8_t);
-uint8_t scrambleRX(uint8_t);
+void scramble_init(SRegister);
+int scramble(uint8_t *, SRegister);
 
-#ifdef	__cplusplus
+#ifdef __cplusplus
 }
 #endif

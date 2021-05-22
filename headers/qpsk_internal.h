@@ -8,8 +8,7 @@
 #pragma once
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
 #include <stdio.h>
@@ -25,15 +24,16 @@ extern "C"
 
 #define TX_FILENAME "/tmp/spectrum-filtered.raw"
 #define RX_FILENAME "/tmp/databits.txt"
-    
+
 #define EOF_COST_VALUE  5.0f
-    
+
 #define EQ_LENGTH       5
 
 #define FS              8000.0f
 #define RS              1600.0f
 #define TS              (1.0f / RS)
 #define CYCLES          (int) (FS / RS)
+#define CYCLESF         5
 #define CENTER          1100.0f
 
 #define NS              8
@@ -41,13 +41,17 @@ extern "C"
 #define FRAME_SYMBOLS   (DATA_SYMBOLS * NS)
 #define DATA_SAMPLES    (DATA_SYMBOLS * CYCLES * NS)
 
-// Frame Size = DATA_SYMBOLS * NS * CYCLES
-#define FRAME_SIZE      1240
+// Data Size = DATA_SYMBOLS * NS * CYCLES
+#define DATA_SIZE       1240
+    
+// Frame Size = Preamble Size + DATA_SYMBOLS * NS * CYCLES
+#define FRAME_SIZE      1880
 
 // (DATA_SYMBOLS * 2 bits * NS)
 #define BITS_PER_FRAME  496
 
 #define PREAMBLE_LENGTH 128
+#define PREAMBLE_SIZE   (PREAMBLE_LENGTH * CYCLESF)
 
 #ifndef M_PI
 #define M_PI            3.14159265358979323846f
@@ -64,9 +68,8 @@ extern "C"
 #define cmplxconj(float_value) (cosf(float_value) + sinf(float_value) * -I)
 
 // Enum
-    
-typedef enum
-{
+
+typedef enum {
     hunt,
     process
 } RXState;

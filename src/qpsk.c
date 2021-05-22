@@ -8,10 +8,6 @@
 // Includes
 
 #include <stdio.h>
-#include <stdlib.h>
-#include <stdint.h>
-#include <stdbool.h>
-#include <complex.h>
 #include <string.h>
 #include <time.h>
 
@@ -20,6 +16,7 @@
 #include "kalman.h"
 #include "scramble.h"
 #include "fir.h"
+#include "fft.h"
 
 // Prototypes
 
@@ -114,10 +111,10 @@ static float magnitude(complex float symbol[], int index) {
 static int equalize(complex float symbol[], int index) {
     int matches = 0;
 
-    for (size_t i = 0, j = index; i < PREAMBLE_LENGTH; i++, j++) {
-        complex float ref = preambletable[i];
-
-        if ((equalize_preamble(symbol, j, ref) * crealf(ref)) > 0.0f) {
+    for (int i = 0, j = index; i < PREAMBLE_LENGTH; i++, j++) {
+        complex float ref = preambletable[i] + 0.0f * I;
+        
+        if ((train_eq(symbol, j, ref) * crealf(ref)) > 0.0f) {
             matches++;
         }
     }
@@ -130,8 +127,8 @@ static int equalize(complex float symbol[], int index) {
  *
  * Basically we receive a 1600 baud QPSK at 8000 samples/sec.
  *
- * Each frame is made up of 33 Pilots and 31 x 8 Data symbols.
- * This is (33 * 5) = 165 + (31 * 5 * 8) = 1240 or 1405 samples per packet
+ * Each frame is made up of 128 Preamble symbols and 31 x 8 Data symbols.
+ * This is (128 * 5) = 640 + (31 * 5 * 8) = 1240 or 1880 samples per packet
  */
 int qpsk_rx_frame(int16_t in[], uint8_t bits[]) {
     /*
@@ -273,19 +270,6 @@ void qpsk_demod(uint8_t bits[], complex float symbol) {
     bits[0] = cimagf(symbol) < 0.0f;    //  Q - Even bits
 }
 
-// Note that the mathematical approximation sin^−1(x) ≈ x, for small x
-void qpsk_demod2(uint8_t bits[], complex float symbol) {
-    float ans;
-    
-    complex float y = autocorrelation();
-    
-    if (crealf(y) >= 0.0f)
-        ans = cimagf(symbol);
-    else {
-        ans = M_PI - cimagf(y);
-    }
-}
-
 /*
  * Modulate the symbols by first upsampling to 8 kHz sample rate,
  * and translating the spectrum to 1100 Hz, where it is filtered
@@ -334,7 +318,7 @@ int qpsk_tx_frame(int16_t samples[], complex float symbol[], int length) {
 /*
  * 128 Symbol Preamble
  */
-int bpsk_modulate(int16_t samples[]) {
+int preamble_modulate(int16_t samples[]) {
     return qpsk_tx_frame(samples, preambletable, PREAMBLE_LENGTH);
 }
 
@@ -355,6 +339,7 @@ int qpsk_modulate(int16_t samples[], uint8_t tx_bits[], int length) {
 
 int main(int argc, char** argv) {
     int16_t frame[FRAME_SIZE];
+    int16_t preamble[PREAMBLE_SIZE];
     int length;
 
     srand(time(0));
@@ -387,11 +372,11 @@ int main(int argc, char** argv) {
 
     for (size_t k = 0; k < 10; k++) {
         // Send preamble unscrambled
-        length = bpsk_modulate(frame);
+        length = preamble_modulate(preamble);
+        
+        fwrite(preamble, sizeof (int16_t), length, fout);
 
-        fwrite(frame, sizeof (int16_t), length, fout);
-
-        //resetTXScrambler();
+        //scramble_init(tx);
         
         /*
          * NS data frames between each preamble frame
@@ -402,8 +387,7 @@ int main(int argc, char** argv) {
             for (size_t i = 0, s = 0; i < DATA_SYMBOLS; i++, s += 2) {
                 uint8_t sdata = ((rand() % 2) << 1) | (rand() % 2);
                 
-                // no scramble for now                            TODO
-                //sdata = scrambleTX(sdata);
+                // scramble(&sdata, tx); TODO
 
                 obits[s + 1] = (sdata >> 1) & 0x1;  // I Odd
                 obits[s] = sdata & 0x1;             // Q Even
@@ -440,6 +424,8 @@ int main(int argc, char** argv) {
 
     state = hunt;
 
+    scramble_init(rx);
+    
     while (1) {
         /*
          * Read in the frame samples
@@ -449,9 +435,13 @@ int main(int argc, char** argv) {
         if (count != FRAME_SIZE)
             break;
         
-        //resetRXScrambler();             TODO
-        
         int valid = qpsk_rx_frame(frame, ibits);
+
+/* TODO
+        for (size_t i = 0; i < count; i++) {
+            scramble(&ibits[i], rx);
+        }
+*/
 
         if (valid) {
             fwrite(ibits, sizeof (uint8_t), BITS_PER_FRAME, fout);
