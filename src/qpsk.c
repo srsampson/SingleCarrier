@@ -359,6 +359,7 @@ int main(int argc, char** argv) {
     }
 
     kalman_init();
+    scramble_init(both);
 
     /*
      * Simulate the transmitted packets.
@@ -427,6 +428,8 @@ int main(int argc, char** argv) {
     scramble_init(rx);
     
     while (1) {
+        //scramble_init(rx);     TODO
+
         /*
          * Read in the frame samples
          */
