@@ -1,3 +1,4 @@
+#define DEBUG2
 /*
  * qpsk.c
  *
@@ -26,7 +27,6 @@ static int equalize(complex float [], int);
 
 // Externals
 
-extern const int8_t pilotvalues[];
 extern const int8_t preamblevalues[];
 
 // Locals
@@ -67,7 +67,7 @@ static bool firwide = false;
 #define FOFFSET 0.0f
 
 #ifdef DEBUG2
-int pilot_frames_detected = 0;
+int preamble_frames_detected = 0;
 #endif
 
 // Functions
@@ -83,7 +83,7 @@ float cnormf(complex float val) {
  * Sliding Window
  *
  * Returns the mean magnitude of the
- * underlying pilot symbols in window
+ * underlying preamble symbols in window
  */
 static float correlate(complex float symbol[], int index) {
     complex float out = 0.0f;
@@ -109,17 +109,17 @@ static float magnitude(complex float symbol[], int index) {
 }
 
 static int equalize(complex float symbol[], int index) {
-    int matches = 0;
+    int match = 0;
 
     for (int i = 0, j = index; i < PREAMBLE_LENGTH; i++, j++) {
         complex float ref = preambletable[i] + 0.0f * I;
         
         if ((train_eq(symbol, j, ref) * crealf(ref)) > 0.0f) {
-            matches++;
+            match++;
         }
     }
 
-    return matches;
+    return match;
 }
 
 /*
@@ -190,13 +190,13 @@ int qpsk_rx_frame(int16_t in[], uint8_t bits[]) {
     float mean = magnitude(decimated_frame, max_index);
 
 #ifdef DEBUG2
-    pilot_frames_detected++;
+    preamble_frames_detected++;
 #endif
 
-    if ((matches > PREAMBLE_LENGTH - 30) && (max_value > mean * 20.0f)) {
+    if ((matches > PREAMBLE_LENGTH - 30) /*&& (max_value > mean * 20.0f)*/) {
 #ifdef DEBUG2
-        printf("Frames: %d Matches: %d MaxIdx: %d MaxVal: %.2f\n",
-                pilot_frames_detected, matches, max_index, max_value);
+        printf("Frames: %d Matches: %d MaxIdx: %d MaxVal: %.2f Mean: %.2f\n",
+                preamble_frames_detected, matches, max_index, max_value, mean);
 #endif
         /*
          * Now process data symbols 
@@ -275,7 +275,7 @@ void qpsk_demod(uint8_t bits[], complex float symbol) {
  * and translating the spectrum to 1100 Hz, where it is filtered
  * using the root raised cosine coefficients.
  */
-int qpsk_tx_frame(int16_t samples[], complex float symbol[], int length) {
+int qpsk_tx_frame(int16_t samples[], complex float symbol[], int length, bool preamble) {
     complex float signal[(length * CYCLES)];
 
     /*
@@ -307,9 +307,15 @@ int qpsk_tx_frame(int16_t samples[], complex float symbol[], int length) {
 
     /*
      * Now return the resulting real samples
+     * 
+     * Make preamble 50% amplitude
      */
     for (size_t i = 0; i < (length * CYCLES); i++) {
-        samples[i] = (int16_t) (crealf(signal[i]) * 16384.0f); // @ .5
+        if (preamble == true) {
+            samples[i] = (int16_t) (crealf(signal[i]) * 8192.0f);
+        } else {
+            samples[i] = (int16_t) (crealf(signal[i]) * 16384.0f);
+        }
     }
 
     return (length * CYCLES);
@@ -318,21 +324,21 @@ int qpsk_tx_frame(int16_t samples[], complex float symbol[], int length) {
 /*
  * 128 Symbol Preamble
  */
-int preamble_modulate(int16_t samples[]) {
-    return qpsk_tx_frame(samples, preambletable, PREAMBLE_LENGTH);
+static int preamble_modulate(int16_t samples[]) {
+    return qpsk_tx_frame(samples, preambletable, PREAMBLE_LENGTH, true);
 }
 
 /*
  * Bits are IQ,IQ,...,IQ
  */
-int qpsk_modulate(int16_t samples[], uint8_t tx_bits[], int length) {
+static int qpsk_modulate(int16_t samples[], uint8_t tx_bits[], int length) {
     complex float symbol[length];
 
     for (size_t i = 0, s = 0; i < length; i++, s += 2) {
         symbol[i] = qpsk_mod(tx_bits, s);   // I Odd index, Q Even index
     }
 
-    return qpsk_tx_frame(samples, symbol, length);
+    return qpsk_tx_frame(samples, symbol, length, false);
 }
 
 // Main Program

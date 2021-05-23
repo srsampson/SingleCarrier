@@ -81,7 +81,7 @@ float cnormf(complex float);
 complex float qpsk_mod(uint8_t [], int);
 void qpsk_demod(uint8_t bits[], complex float symbol);
 int qpsk_rx_frame(int16_t [], uint8_t []);
-int qpsk_tx_frame(int16_t [], complex float [], int);
+int qpsk_tx_frame(int16_t [], complex float [], int, bool);
 
 #ifdef __cplusplus
 }
