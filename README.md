@@ -1,5 +1,5 @@
 #### QPSK Modem
-A Single Carrier 1600 Baud Coherent QPSK Modem
+A Single Carrier 1600 Baud QPSK Modem
 
 #### Description
 1600 Baud QPSK or 2-bits per symbol is 3000 bit/sec. The preamble uses BPSK for syncronization. One frame of BPSK preamble, and eight frames of QPSK data.
